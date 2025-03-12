@@ -3,7 +3,8 @@ module.exports = {
     database: process.env.DATABASE || 'solicitud_refacciones',
     username: process.env.USER_DATABASE || 'dev',
     password: process.env.PASSWORD_DATABASE || 'Develop123',   
-    options:{        
+    options:{
+        logging: false,
         host: process.env.HOST_DATABASE ||'localhost',
         dialect: process.env.DIALECT || 'mysql',
         port: process.env.PORT_DATABASE || '3306',

@@ -50,12 +50,12 @@ module.exports = (sequelize, DataType) => {
 
     
 
-    // Usuarios.associate = (models) => {        
-    //     Usuarios.belongsTo(models.Roles, {
-    //         foreignKey: 'idRol',
-    //         sourceKey: 'idRol'
-    //     });
-    // }
+    Usuarios.associate = (models) => {        
+        Usuarios.belongsTo(models.Roles, {
+            foreignKey: 'id_role',
+            sourceKey: 'id_role'
+        });
+    }
     
 
     return Usuarios;

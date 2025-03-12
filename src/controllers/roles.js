@@ -284,7 +284,7 @@ module.exports = app => {
 
         //Clear Array
         ids_permissions_selected = await _.map(ids_permissions_selected, (value) => {
-            if(value.length === 1) { 
+            if (value && value.length === 1) { 
                 return value[0];
             } else {
                 return value;
@@ -292,13 +292,13 @@ module.exports = app => {
         });
         
         await _.forEach(ids_permissions_selected, (value1, key) => {
-            if(value1.length > 1) {                    
+            if(value1 && value1.length > 1) {                    
                 ids_permissions_selected = _.concat(ids_permissions_selected, value1);
             } 
         });
 
         ids_permissions_selected = await _.filter(ids_permissions_selected, (value) => {
-            return value.length === undefined;
+            return value && value.length === undefined;
         });
         
         await _.forEach(ids_permissions_selected, (value1, key) => {
