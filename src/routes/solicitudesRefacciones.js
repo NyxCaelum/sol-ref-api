@@ -8,6 +8,8 @@ module.exports = app => {
 
     app.patch('/solicitudes/actualizarsolicitud', SolicitudesRefacciones.ActualizarSolicitud);
     
+    app.patch('/solicitudes/actualizarValidarSolicitud', SolicitudesRefacciones.ActualizarValidarSolicitud);
+    
     // app.patch('/asignacion/actualizar', AsignacionCarriles.editarAsigCarr);
 
 }

@@ -15,10 +15,22 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(150),
             allowNull: false,
         },
+        activo: {
+            type: DataType.INTEGER,
+            allowNull: true,
+            default: 1,
+        }
     }, {
-        tableName: 'refacciones',
+        tableName: 'refacciones_catalogo',
         timestamps: false,
     });
+
+    Refacciones.associate = (models) => {
+        Refacciones.hasMany(models.Refaccion_solicitada, {
+            foreignKey: 'id_refaccion',
+            as: 'refaccionesSolicitadas'
+        });
+    };
 
     return Refacciones;
 }

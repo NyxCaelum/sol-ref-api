@@ -12,7 +12,7 @@ module.exports = {
             dateStrings: true,
             typeCast: true
         },
-        timezone: '-07:00',
+        timezone: '-06:00',
         pool: {
             max: 20,
             idle: 30000

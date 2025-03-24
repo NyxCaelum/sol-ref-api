@@ -1,4 +1,3 @@
-
 module.exports = (sequelize, DataType) => {
     const base = sequelize.define('Base', {
         id_base:{
@@ -14,6 +13,13 @@ module.exports = (sequelize, DataType) => {
         tableName: 'base',
         timestamps: false
     });
+    
+    base.associate = (models) => {
+        base.hasMany(models.Solicitud, {
+            foreignKey: 'id_base',
+            as: 'solicitud'
+        });
+    };
     
     return base;
 }

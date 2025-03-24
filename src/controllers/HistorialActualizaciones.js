@@ -22,6 +22,10 @@ module.exports = (app) => {
                 attributes: ['entregado']
             });
 
+        console.log("Estatus solicitud:", estatusSolicitud.entregado);
+        console.log("Número de pedido:", cambio.numero_pedido);
+
+        // Check if the condition is correct
         if(estatusSolicitud.entregado == false && cambio.numero_pedido != null){
             await Solicitud.update(
                 {entregado: 1},
