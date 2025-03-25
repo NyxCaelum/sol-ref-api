@@ -42,6 +42,14 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(255),
             allowNull: true,
         },
+        fecha_autorizacion_compras: {
+            type: DataType.DATE,
+            allowNull: true,
+        },
+        fecha_autorizacion_ci: {
+            type: DataType.DATE,
+            allowNull: true,
+        },
     }, {
         tableName: 'compras_actualizacion',
         timestamps: false,

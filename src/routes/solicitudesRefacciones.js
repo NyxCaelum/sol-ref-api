@@ -10,6 +10,8 @@ module.exports = app => {
     
     app.patch('/solicitudes/actualizarValidarSolicitud', SolicitudesRefacciones.ActualizarValidarSolicitud);
     
-    // app.patch('/asignacion/actualizar', AsignacionCarriles.editarAsigCarr);
+    app.patch('/almacencentral/recepcionenvio', SolicitudesRefacciones.cambiarEstatusAlmacenCentral);
+
+    app.post('/almaceninterno/confirmarrecepcion', SolicitudesRefacciones.confirmarRecepcion);
 
 }

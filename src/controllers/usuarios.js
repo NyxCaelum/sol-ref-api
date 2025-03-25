@@ -33,19 +33,16 @@ module.exports = app => {
     app.CrearUsuario = (req, res) => {
 
         const {id_role, id_base, nombre_usuario, nombre_empleado, numero_empleado, contrasena}  = req.body;
-
         let usuario = new Usuario({
-            id_base: id_base,
             id_role: id_role,
+            id_base: id_base,
             nombre_usuario: nombre_usuario,
             nombre_empleado: nombre_empleado,
             numero_empleado: numero_empleado,
             contrasena: bcrypt.hashSync(contrasena, 10),
         });
-
-        Usuario.create(usuario.dataValues, {
-            fields: ['id_role', 'id_base', 'nombre_usuario', 'nombre_empleado', 'numero_empleado', 'contrasena']
-        })
+        
+        Usuario.create(usuario.dataValues)
         .then(result => {
             delete result.dataValues.contrasena;
             res.json({

@@ -1,7 +1,7 @@
-// Importaciones necesarias
 const fs = require('fs');
 const moment = require('moment');
 const path = require('path');
+const sequelize = require('sequelize');
 const { Op } = require('sequelize');
 
 // Función para guardar archivos en base64
@@ -26,7 +26,7 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   if (type === 'solicitud') {
     filename = `${filenamePrefix}_${DateFormated}_${solicitud.unidad}_${solicitud.ot}.${extension}`;
   } else if (type === 'refaccion') {
-    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_solicitud}_${solicitud.id_refaccion}.${extension}`;
+    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_refaccion_solicitada}_${solicitud.id_refaccion}.${extension}`;
   }
   const filePath = path.join(folder, filename);
   fs.writeFileSync(filePath, buffer);
@@ -42,7 +42,6 @@ module.exports = (app) => {
   const refaccionesCatalogo = app.database.models.Refacciones;
   const CambioEstatusRefaccion = app.database.models.Cambio_estatus_refaccion;
 
-  
   app.SolicitudesPte = async (req, res) => {
       const base = req.params.base;
       let opcionBase;
@@ -66,69 +65,106 @@ module.exports = (app) => {
           const solicitudes = await Solicitud.findAll({
             where: opcionBase,
             include: [
-            { 
-            model: Base,
-            required: false,
-            as: 'base'
-            },
-            { 
-            model: refaccionSolicitada,
-            attributes: { exclude: [] },
-            required: false,
-            include: [
               { 
-              model: refaccionesCatalogo,
-              required: false,
-              as: 'refaccion'
+                model: Base,
+                required: false,
+                as: 'base'
               },
               { 
-              model: comprasActualizacion,
-              required: false,
-              as: 'comprasActualizacion'
-              },
-              { 
-              model: CambioEstatusRefaccion,
-              required: false,
-              as: 'cambiosEstatus',
-              attributes: {
+                model: refaccionSolicitada,
+                attributes: { exclude: [] },
+                required: false,
                 include: [
-                  [
-                    app.database.Sequelize.literal(`
-                      TIMEDIFF(
-                        fecha_cambio,
-                        COALESCE(
-                          LAG(fecha_cambio) OVER (
-                            PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
-                            ORDER BY fecha_cambio
-                          ),
-                          fecha_cambio
-                        )
-                      )
-                    `),
-                    'diferencia_horas_minutos'
-                  ],
-                  [
-                    app.database.Sequelize.literal(`
-                      TIMEDIFF(
-                        NOW(),
-                        MAX(fecha_cambio) OVER (
-                          PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada
-                        )
-                      )
-                    `),
-                    'diferencia_horas_minutos_actual'
-                  ]
-                ]                  
-              }
+                  { 
+                    model: refaccionesCatalogo,
+                    required: false,
+                    as: 'refaccion'
+                  },
+                  { 
+                    model: comprasActualizacion,
+                    required: false,
+                    as: 'comprasActualizacion'
+                  },
+                  { 
+                    model: CambioEstatusRefaccion,
+                    required: false,
+                    as: 'cambiosEstatus',
+                    attributes: {
+                      include: [
+                      [
+                        app.database.Sequelize.literal(`
+                          TIMEDIFF(
+                            fecha_cambio,
+                            COALESCE(
+                              LAG(fecha_cambio) OVER (
+                                PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
+                                ORDER BY fecha_cambio
+                              ),
+                              fecha_cambio
+                            )
+                          )
+                        `),
+                        'diferencia_horas_minutos'
+                      ],
+                      [
+                        app.database.Sequelize.literal(`
+                          TIMEDIFF(
+                            NOW(),
+                            MAX(fecha_cambio) OVER (
+                              PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada
+                            )
+                          )
+                        `),
+                        'diferencia_horas_minutos_actual'
+                      ]
+                    ]                  
+                  }
+                }
+              ],
+              as: 'refaccionesSolicitadas'
               }
             ],
-            as: 'refaccionesSolicitadas'
-            }
-            ]
           });
           
+            const refaccionesPorEstatus = await refaccionSolicitada.findAll({
+              attributes: [
+              'estatus',
+              [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
+              ],
+              include: [
+              {
+                model: Solicitud,
+                attributes: [],
+                required: true,
+                as: 'solicitud',
+                where: opcionBase
+              }
+              ],
+              group: ['estatus'],
+              where: {
+              [Op.or]: [
+                { estatus: null },
+                { estatus: { [Op.in]: [
+                'por_solicitar',
+                'pte_validar_sol_ac',
+                'solicitud_rechazada',
+                'en_proceso_compras',
+                'pte_recepcion_ac',
+                'pte_enviar_ac',
+                'por_recibir_ai',
+                'recibidas'
+                ] } }
+              ]
+              }
+            });
 
-          return res.json({ OK: true, result: solicitudes });
+            const conteoPorEstatus = refaccionesPorEstatus.reduce((acc, item) => {
+            acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+            return acc;
+            }, {});
+
+            return res.json({ OK: true, result: solicitudes, conteoPorEstatus });
+
       } catch (error) {
           console.error('Error en SolicitudesPte:', error);
           return res.json(error);
@@ -209,20 +245,32 @@ module.exports = (app) => {
 
       //Evidencias
       const evidencia_advan = solicitud.evidencia_advan;
-      const evidencia_vale_diagnostico = solicitud.evidencia_advan;
-      const evidencia_vale_almacen = solicitud.evidencia_advan;
-      const evidencia_autorizacion_jefatura = solicitud.evidencia_advan;
-      const evidencia_autorizacion_gerencia = solicitud.evidencia_advan;
-      const evidencia_autorizacion_CI = solicitud.evidencia_advan;
+      const evidencia_vale_diagnostico = solicitud.evidencia_vale_diagnostico;
+      const evidencia_vale_almacen = solicitud.evidencia_vale_almacen;
+      const evidencia_autorizacion_jefatura = solicitud.evidencia_autorizacion_jefatura;
+      const evidencia_autorizacion_gerencia = solicitud.evidencia_autorizacion_gerencia;
+      const evidencia_autorizacion_CI = solicitud.evidencia_autorizacion_CI;
 
       try {
+
+        const evidencias_anteriores = await Solicitud.findOne({
+          where: { id_solicitud: solicitud.id_solicitud },
+          attributes: [
+            'evidencia_advan',
+            'evidencia_vale_diagnostico',
+            'evidencia_vale_almacen',
+            'evidencia_autorizacion_jefatura',
+            'evidencia_autorizacion_gerencia',
+            'evidencia_autorizacion_CI'
+          ]
+        });
 
         if (evidencia_advan) {
           const matches = evidencia_advan.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {} 
           else {
-            EliminarEvidenciaAnterior(evidencia_advan);
-            solicitud.evidencia_advan = saveBase64File(evidencia_advan, uploadFolder, 'evidencia_advan', solicitud, 'solicitud');
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_advan, evidenciasSolicitudes);
+            solicitud.evidencia_advan = saveBase64File(evidencia_advan, evidenciasSolicitudes, 'evidencia_advan', solicitud, 'solicitud');
           }
         }
 
@@ -230,7 +278,7 @@ module.exports = (app) => {
           const matches = evidencia_vale_diagnostico.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {
           }else{
-            EliminarEvidenciaAnterior(evidencia_vale_diagnostico);
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_vale_diagnostico, evidenciasSolicitudes);
             solicitud.evidencia_vale_diagnostico = saveBase64File(evidencia_vale_diagnostico, evidenciasSolicitudes, 'evidencia_vale_diagnostico', solicitud, 'solicitud');
           }
         }
@@ -239,7 +287,7 @@ module.exports = (app) => {
           const matches = evidencia_vale_almacen.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {}
           else{
-            EliminarEvidenciaAnterior(evidencia_vale_almacen);
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_vale_almacen, evidenciasSolicitudes);
             solicitud.evidencia_vale_almacen = saveBase64File(evidencia_vale_almacen, evidenciasSolicitudes, 'evidencia_vale_almacen', solicitud, 'solicitud');
           }
         }
@@ -248,7 +296,7 @@ module.exports = (app) => {
           const matches = evidencia_autorizacion_jefatura.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {}
           else{
-            EliminarEvidenciaAnterior(evidencia_autorizacion_jefatura);
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_autorizacion_jefatura, evidenciasSolicitudes);
             solicitud.evidencia_autorizacion_jefatura = saveBase64File(evidencia_autorizacion_jefatura, evidenciasSolicitudes, 'evidencia_autorizacion_jefatura', solicitud, 'solicitud');
           }
         }
@@ -257,7 +305,7 @@ module.exports = (app) => {
           const matches = evidencia_autorizacion_gerencia.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {}
           else{
-            EliminarEvidenciaAnterior(evidencia_autorizacion_gerencia);
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_autorizacion_gerencia, evidenciasSolicitudes);
             solicitud.evidencia_autorizacion_gerencia = saveBase64File(evidencia_autorizacion_gerencia, evidenciasSolicitudes, 'evidencia_autorizacion_gerencia', solicitud, 'solicitud');
           }
         }
@@ -266,7 +314,7 @@ module.exports = (app) => {
           const matches = evidencia_autorizacion_CI.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
           if (!matches || matches.length !== 3) {}
           else{
-            EliminarEvidenciaAnterior(evidencia_autorizacion_CI);
+            EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_autorizacion_CI, evidenciasSolicitudes);
             solicitud.evidencia_autorizacion_CI = saveBase64File(evidencia_autorizacion_CI, evidenciasSolicitudes, 'evidencia_autorizacion_CI', solicitud, 'solicitud');
           }
         }
@@ -288,17 +336,19 @@ module.exports = (app) => {
         });
 
         const idsRefaccionesExistentes = refacciones
-          .filter(r => r.id_refaccion_solicitada)
+          .filter(r => r.id_refaccion_solicitada !== undefined && r.id_refaccion_solicitada !== null)
           .map(r => r.id_refaccion_solicitada);
 
-        await refaccionSolicitada.destroy({
-          where: {
-            id_solicitud: solicitud.id_solicitud,
-            id_refaccion_solicitada: {
-              [Op.notIn]: idsRefaccionesExistentes
+          if (idsRefaccionesExistentes.length > 0) {
+          await refaccionSolicitada.destroy({
+            where: {
+              id_solicitud: solicitud.id_solicitud,
+              id_refaccion_solicitada: {
+                [Op.notIn]: idsRefaccionesExistentes
+              }
             }
-          }
-        });
+          });
+        }
 
         const refaccionesParaActualizar = await Promise.all(
           refacciones.map(async (refaccion) => {
@@ -308,11 +358,25 @@ module.exports = (app) => {
           const evidencia_ausencia_core = refaccion.evidencia_ausencia_core;
           const evidencia_reporte_danos = refaccion.evidencia_reporte_danos;
 
+          if(!refaccion.id_refaccion_solicitada){
+            refaccion.id_refaccion_solicitada = null
+          }
+
+          const evidencias_anteriores = await refaccionSolicitada.findOne({
+            where: { id_refaccion_solicitada: refaccion.id_refaccion_solicitada },
+            attributes: [
+              'evidencia_core',
+              'evidencia_tarjeta_roja',
+              'evidencia_ausencia_core',
+              'evidencia_reporte_danos',
+            ]
+          });
+
           if (evidencia_core) {
             const matches = evidencia_core.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {}
             else{
-              EliminarEvidenciaAnterior(evidencia_core);
+              EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_core, evidenciaRefacciones);
               refaccion.evidencia_core = saveBase64File(evidencia_core, evidenciaRefacciones, 'evidencia_core', refaccion, 'refaccion');
             }
           }
@@ -321,7 +385,7 @@ module.exports = (app) => {
             const matches = evidencia_tarjeta_roja.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {}
             else{
-              EliminarEvidenciaAnterior(evidencia_tarjeta_roja);
+              EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_tarjeta_roja, evidenciaRefacciones);
               refaccion.evidencia_tarjeta_roja = saveBase64File(evidencia_tarjeta_roja, evidenciaRefacciones, 'evidencia_tarjeta_roja', refaccion, 'refaccion');
             }
           }
@@ -330,7 +394,7 @@ module.exports = (app) => {
             const matches = evidencia_ausencia_core.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {}
             else{
-              EliminarEvidenciaAnterior(evidencia_ausencia_core);
+              EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_ausencia_core, evidenciaRefacciones);
               refaccion.evidencia_ausencia_core = saveBase64File(evidencia_ausencia_core, evidenciaRefacciones, 'evidencia_ausencia_core', refaccion, 'refaccion');
             }
           }
@@ -339,13 +403,13 @@ module.exports = (app) => {
             const matches = evidencia_reporte_danos.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {}
             else{
-              EliminarEvidenciaAnterior(evidencia_reporte_danos);
+              EliminarEvidenciaAnterior(evidencias_anteriores.evidencia_reporte_danos, evidenciaRefacciones);
               refaccion.evidencia_reporte_danos = saveBase64File(evidencia_reporte_danos, evidenciaRefacciones, 'evidencia_reporte_danos', refaccion, 'refaccion');
             }
           }
 
           if(solicitudCompleta || solicitud.estado === 4){
-            refaccion.estatus = 'pte_validar_sol_ac';
+              refaccion.estatus = 'pte_validar_sol_ac';
 
           // Trigger para almacenar información en cambio_estatus_refaccion
             await CambioEstatusRefaccion.create({
@@ -353,6 +417,10 @@ module.exports = (app) => {
               estatus: refaccion.estatus,
               fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
             });
+          }
+
+          if(refaccion.estatus === null){
+            refaccion.estatus = 'por_solicitar'
           }
 
           return {
@@ -377,7 +445,6 @@ module.exports = (app) => {
   };
 
   app.ActualizarValidarSolicitud = async (req, res) => {
-    console.log(req.body)
     let refacciones = req.body.refacciones;
     delete req.body.refacciones;
     let solicitud = req.body;
@@ -416,7 +483,7 @@ module.exports = (app) => {
         });
       } else {
 
-        solicitud.estado = 5; //Solicitud en proceso
+        solicitud.estado = 5;
 
         const solicitudActualizada = await Solicitud.update(
           {
@@ -469,72 +536,157 @@ module.exports = (app) => {
     }    
   }
 
+  app.cambiarEstatusAlmacenCentral = async (req, res) => {
+    const data = req.body.data;
+    const pasarAPorEnviar = req.body.pasarAPorEnviar;
+    const pasarAPorRecepcionAlmacenInterno = req.body.pasarAPorRecepcionAlmacenInterno;
+
+    try {
+      if(data.estatus === 'pte_recepcion_ac' && pasarAPorEnviar){
+        await refaccionSolicitada.update(
+          {
+            estatus: 'pte_enviar_ac'
+          },
+          {
+           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
+          }
+        );
+
+        await CambioEstatusRefaccion.create({
+          id_refaccion_solicitada: data.id_refaccion_solicitada,
+          estatus: 'pte_enviar_ac',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        });
+      }
+
+      if(data.estatus === 'pte_enviar_ac' && pasarAPorRecepcionAlmacenInterno){
+        await refaccionSolicitada.update(
+          {
+            estatus: 'por_recibir_ai'
+          },
+          {
+           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
+          }
+        );
+
+        await CambioEstatusRefaccion.create({
+          id_refaccion_solicitada: data.id_refaccion_solicitada,
+          estatus: 'por_recibir_ai',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        });
+      }
+        
+        return res.json({
+            OK: true,
+            msg: 'Actualizado correctamente'
+        });
+    } catch (error) {
+        console.error('Error en ActualizarSolicitud:', error);
+        return res.json(error);
+    }
+  }
+
+  app.confirmarRecepcion = async (req, res) => {
+    const data = req.body.data;
+    const confirmarRecepcionAI = req.body.confirmarRecepcionAI;
+
+    try {
+      if(confirmarRecepcionAI){
+        await refaccionSolicitada.update(
+          {
+            estatus: 'recibidas',
+            fecha_entrega: moment()
+          },
+          {
+           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
+          }
+        );
+
+        await CambioEstatusRefaccion.create({
+          id_refaccion_solicitada: data.id_refaccion_solicitada,
+          estatus: 'recibidas',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        });
+      }
+        
+      return res.json({
+          OK: true,
+          msg: 'Actualizado correctamente'
+      });
+    } catch (error) {
+        console.error('Error en ActualizarSolicitud:', error);
+        return res.json(error);
+    }
+}
+
   return app;
 };
 
-const EliminarEvidenciaAnterior = (nombreArchivo) => {
-  const previousFilePath = path.join(uploadFolder, nombreArchivo);
-  if (fs.existsSync(previousFilePath)) {
-    fs.unlinkSync(previousFilePath);
+const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
+  if(nombreArchivo){
+    const previousFilePath = path.join(filepath, nombreArchivo);
+    if (fs.existsSync(previousFilePath)) {
+      fs.unlinkSync(previousFilePath);
+    }
   }
 }
 
 
 
-            // const solicitudes = await app.database.sequelize.query(
-            //   `SELECT 
-            //     SOL.id_solicitud,
-            //       SOL.id_base,
-            //       SOL.fecha_inicio_solicitud,
-            //       SOL.fecha_solicitud_completa,
-            //       SOl.unidad,
-            //       SOL.ot,
-            //       SOL.carril,
-            //       SOL.estado,
-            //       SOL.numero_pedido,
-            //       SOL.comentario_rechazo_solicitud,
-            //       SOL.evidencia_advan,
-            //       SOL.evidencia_vale_diagnostico,
-            //       SOL.evidencia_vale_almacen,
-            //       SOL.evidencia_autorizacion_jefatura,
-            //       SOL.evidencia_autorizacion_gerencia,
-            //       SOL.evidencia_autorizacion_CI,
-                  
-            //       BASE.base,
-                  
-            //       REF_SOL.id_refaccion_solicitada,
-            //       REF_SOL.estatus,
-            //       REF_SOL.cantidad,
-            //       REF_SOL.core,
-            //       REF_SOL.fecha_entrega,
-            //       REF_SOL.evidencia_core,
-            //       REF_SOL.evidencia_tarjeta_roja,
-            //       REF_SOL.evidencia_ausencia_core,
-            //       REF_SOL.evidencia_reporte_danos,
-                  
-            //       REF_CAT.id_refaccion,
-            //       REF_CAT.clave,
-            //       REF_CAT.refaccion,
-                  
-            //       COM_ACT.id_compras_actualizacion,
-            //       COM_ACT.orden_compra,
-            //       COM_ACT.fecha_actualizacion,
-            //       COM_ACT.fecha_compromiso,
-            //       COM_ACT.fecha_oc,
-            //       COM_ACT.causas_retraso,
-            //       COM_ACT.terminal,
-            //       COM_ACT.proveedor,
-            //       COM_ACT.observaciones
-            //   FROM
-            //     solicitud AS SOL
-            //       LEFT JOIN base AS BASE ON BASE.id_base = SOL.id_base
-            //       LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
-            //       LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
-            //       LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
-            //   WHERE 
-            //     SOL.id_base = ?`,
-            //   {
-            //     replacements: [base],
-            //     type: QueryTypes.SELECT,
-            //   },
-            // );
+// const solicitudes = await app.database.sequelize.query(
+//   `SELECT 
+//     SOL.id_solicitud,
+//       SOL.id_base,
+//       SOL.fecha_inicio_solicitud,
+//       SOL.fecha_solicitud_completa,
+//       SOl.unidad,
+//       SOL.ot,
+//       SOL.carril,
+//       SOL.estado,
+//       SOL.numero_pedido,
+//       SOL.comentario_rechazo_solicitud,
+//       SOL.evidencia_advan,
+//       SOL.evidencia_vale_diagnostico,
+//       SOL.evidencia_vale_almacen,
+//       SOL.evidencia_autorizacion_jefatura,
+//       SOL.evidencia_autorizacion_gerencia,
+//       SOL.evidencia_autorizacion_CI,
+      
+//       BASE.base,
+      
+//       REF_SOL.id_refaccion_solicitada,
+//       REF_SOL.estatus,
+//       REF_SOL.cantidad,
+//       REF_SOL.core,
+//       REF_SOL.fecha_entrega,
+//       REF_SOL.evidencia_core,
+//       REF_SOL.evidencia_tarjeta_roja,
+//       REF_SOL.evidencia_ausencia_core,
+//       REF_SOL.evidencia_reporte_danos,
+      
+//       REF_CAT.id_refaccion,
+//       REF_CAT.clave,
+//       REF_CAT.refaccion,
+      
+//       COM_ACT.id_compras_actualizacion,
+//       COM_ACT.orden_compra,
+//       COM_ACT.fecha_actualizacion,
+//       COM_ACT.fecha_compromiso,
+//       COM_ACT.fecha_oc,
+//       COM_ACT.causas_retraso,
+//       COM_ACT.terminal,
+//       COM_ACT.proveedor,
+//       COM_ACT.observaciones
+//   FROM
+//     solicitud AS SOL
+//       LEFT JOIN base AS BASE ON BASE.id_base = SOL.id_base
+//       LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+//       LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
+//       LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
+//   WHERE 
+//     SOL.id_base = ?`,
+//   {
+//     replacements: [base],
+//     type: QueryTypes.SELECT,
+//   },
+// );
