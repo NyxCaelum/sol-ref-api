@@ -106,17 +106,6 @@ module.exports = (app) => {
                         `),
                         'diferencia_horas_minutos'
                       ],
-                      [
-                        app.database.Sequelize.literal(`
-                          TIMEDIFF(
-                            NOW(),
-                            MAX(fecha_cambio) OVER (
-                              PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada
-                            )
-                          )
-                        `),
-                        'diferencia_horas_minutos_actual'
-                      ]
                     ]                  
                   }
                 }
@@ -124,9 +113,47 @@ module.exports = (app) => {
               as: 'refaccionesSolicitadas'
               }
             ],
+            limit: base === 3 ? 100 : 50
           });
           
-            const refaccionesPorEstatus = await refaccionSolicitada.findAll({
+            const refaccionesPorEstatusCriticas = await refaccionSolicitada.findAll({
+              attributes: [
+              'estatus',
+              [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
+              ],
+              include: [
+              {
+                model: Solicitud,
+                attributes: [],
+                required: true,
+                as: 'solicitud',
+                  where: {
+                  ...opcionBase,
+                  [Op.or]: [
+                    { carril: { [Op.ne]: null } },
+                  ]
+                }
+              }
+              ],
+              group: ['estatus'],
+              where: {
+              [Op.or]: [
+                { estatus: null },
+                { estatus: { [Op.in]: [
+                'por_solicitar',
+                'pte_validar_sol_ac',
+                'solicitud_rechazada',
+                'en_proceso_compras',
+                'pte_recepcion_ac',
+                'pte_enviar_ac',
+                'por_recibir_ai',
+                'recibidas'
+                ] } }
+              ]
+              }
+            });
+
+            const refaccionesPorEstatusTodas = await refaccionSolicitada.findAll({
               attributes: [
               'estatus',
               [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
@@ -158,12 +185,29 @@ module.exports = (app) => {
               }
             });
 
-            const conteoPorEstatus = refaccionesPorEstatus.reduce((acc, item) => {
-            acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
-            return acc;
+            const conteoPorEstatusCriticas = refaccionesPorEstatusCriticas.reduce((acc, item) => {
+              acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+              return acc;
             }, {});
 
-            return res.json({ OK: true, result: solicitudes, conteoPorEstatus });
+            const conteoPorEstatus = refaccionesPorEstatusTodas.reduce((acc, item) => {
+              acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+              return acc;
+            }, {});
+
+            return res.json({ 
+              OK: true, 
+              result: solicitudes, 
+              conteoPorEstatus, 
+              conteoPorEstatusCriticas
+            });
+
+            // const conteoPorEstatus = refaccionesPorEstatus.reduce((acc, item) => {
+            // acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+            // return acc;
+            // }, {});
+
+            // return res.json({ OK: true, result: solicitudes, conteoPorEstatus });
 
       } catch (error) {
           console.error('Error en SolicitudesPte:', error);
@@ -221,13 +265,23 @@ module.exports = (app) => {
 
         const refaccionesCreadas = await refaccionSolicitada.bulkCreate(refacciones);
 
-          return res.json({
-              OK: true,
-              result: {
-                solicitudCreada,
-                refaccionesCreadas
-              }
-          });
+        await Promise.all(
+          refaccionesCreadas.map(async (refaccion) => {
+            await CambioEstatusRefaccion.create({
+              id_refaccion_solicitada: refaccion.id_refaccion_solicitada,
+              estatus: 'por_solicitar',
+              fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+            });
+          })
+        );
+
+        return res.json({
+            OK: true,
+            result: {
+              solicitudCreada,
+              refaccionesCreadas
+            }
+        });
       } catch (error) {
           console.error('Error en NuevaSolicitud:', error);
           return res.json({ OK: false, error });
