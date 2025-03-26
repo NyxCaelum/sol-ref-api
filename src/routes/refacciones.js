@@ -1,13 +1,9 @@
 module.exports = app => {
 
     const Refacciones = app.controllers.refacciones;
-    // const AsignacionCarriles = app.controllers.asignacionCarriles;
+    const { verificarToken } = app.middlewares.auth;
 
-    app.post('/refaccion/nueva', Refacciones.NuevasRefacciones);
-    app.get('/refaccion', Refacciones.BuscarClave);
+    app.post('/refaccion/nueva', [verificarToken], Refacciones.NuevasRefacciones);
+    app.get('/refaccion', [verificarToken], Refacciones.BuscarClave);
     
-    // app.patch('/asignacion/actualizar', AsignacionCarriles.editarAsigCarr);
-
-    // app.post('/ingreso/nuevo', IngresosUnidades.NuevoIngreso);
-
 }

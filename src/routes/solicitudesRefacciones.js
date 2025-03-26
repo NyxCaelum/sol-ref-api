@@ -1,17 +1,18 @@
 module.exports = app => {
 
     const SolicitudesRefacciones = app.controllers.solicitudesRefacciones;
+    const { verificarToken } = app.middlewares.auth;
 
-    app.get('/solicitudes/:base', SolicitudesRefacciones.SolicitudesPte);
+    app.get('/solicitudes/:base', [verificarToken], SolicitudesRefacciones.SolicitudesPte);
 
-    app.post('/solicitudes/nueva', SolicitudesRefacciones.NuevaSolicitud);
+    app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);
 
-    app.patch('/solicitudes/actualizarsolicitud', SolicitudesRefacciones.ActualizarSolicitud);
+    app.patch('/solicitudes/actualizarsolicitud', [verificarToken], SolicitudesRefacciones.ActualizarSolicitud);
     
-    app.patch('/solicitudes/actualizarValidarSolicitud', SolicitudesRefacciones.ActualizarValidarSolicitud);
+    app.patch('/solicitudes/actualizarValidarSolicitud', [verificarToken], SolicitudesRefacciones.ActualizarValidarSolicitud);
     
-    app.patch('/almacencentral/recepcionenvio', SolicitudesRefacciones.cambiarEstatusAlmacenCentral);
+    app.patch('/almacencentral/recepcionenvio', [verificarToken], SolicitudesRefacciones.cambiarEstatusAlmacenCentral);
 
-    app.post('/almaceninterno/confirmarrecepcion', SolicitudesRefacciones.confirmarRecepcion);
+    app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion);
 
 }
