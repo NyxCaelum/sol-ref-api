@@ -5,6 +5,7 @@ const sequelize = require('sequelize');
 const { Op } = require('sequelize');
 
 // Función para guardar archivos en base64
+
 function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   // Asegurarse de que la carpeta exista
   if (!fs.existsSync(folder)) {
@@ -21,12 +22,15 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   const mimeType = matches[1];
   const extension = mimeType.split('/')[1];
 
+  console.log(folder, filenamePrefix, type, mimeType, extension)
+
   const buffer = Buffer.from(matches[2], 'base64');
   let filename;
   if (type === 'solicitud') {
     filename = `${filenamePrefix}_${DateFormated}_${solicitud.unidad}_${solicitud.ot}.${extension}`;
   } else if (type === 'refaccion') {
-    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_refaccion_solicitada}_${solicitud.id_refaccion}.${extension}`;
+    console.log(solicitud)
+    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_solicitud}_${solicitud.id_refaccion}.${extension}`;
   }
   const filePath = path.join(folder, filename);
   fs.writeFileSync(filePath, buffer);
@@ -253,13 +257,15 @@ module.exports = (app) => {
             refaccion.evidencia_tarjeta_roja = saveBase64File(refaccion.evidencia_tarjeta_roja, evidenciaRefacciones, 'evidencia_tarjeta_roja', refaccion, 'refaccion');
           }
 
-          if(refaccion.ausencia_core){
+          if(refaccion.evidencia_ausencia_core){
             refaccion.evidencia_ausencia_core = saveBase64File(refaccion.evidencia_ausencia_core, evidenciaRefacciones, 'evidencia_ausencia_core', refaccion, 'refaccion');
           }
 
-          if(refaccion.evodencia_reporte_danos){
+          if(refaccion.evidencia_reporte_danos){
             refaccion.evidencia_reporte_danos = saveBase64File(refaccion.evidencia_reporte_danos, evidenciaRefacciones, 'evidencia_reporte_danos', refaccion, 'refaccion');
+
           }
+
           return refaccion;
         })
 
