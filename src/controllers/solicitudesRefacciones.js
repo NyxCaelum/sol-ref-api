@@ -22,8 +22,6 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   const mimeType = matches[1];
   const extension = mimeType.split('/')[1];
 
-  console.log(folder, filenamePrefix, type, mimeType, extension)
-
   const buffer = Buffer.from(matches[2], 'base64');
   let filename;
   if (type === 'solicitud') {
@@ -52,18 +50,18 @@ module.exports = (app) => {
       
       try {
           switch(base) {
-              case '3':
-                  opcionBase = {};
-                  break;
-              default:
-                opcionBase = {id_base: base};
-                  break;
-              // case '3':
-              //     opcionBase = 'SOL.estado = 1 OR SOL.estado = 2';
-              //     break;
-              // default:
-              //     opcionBase = `SOL.id_base = ${base}`;
-              //     break;
+            case '3':
+                opcionBase = {};
+                break;
+            default:
+              opcionBase = {id_base: base};
+                break;
+            // case '3':
+            //     opcionBase = 'SOL.estado = 1 OR SOL.estado = 2';
+            //     break;
+            // default:
+            //     opcionBase = `SOL.id_base = ${base}`;
+            //     break;
           }
           
           const solicitudes = await Solicitud.findAll({
@@ -598,14 +596,14 @@ module.exports = (app) => {
 
   app.cambiarEstatusAlmacenCentral = async (req, res) => {
     const data = req.body.data;
-    const pasarAPorEnviar = req.body.pasarAPorEnviar;
+    const pasarAPtePedidoEntreCompañias = req.body.pasarAPtePedidoEntreCompanias;
     const pasarAPorRecepcionAlmacenInterno = req.body.pasarAPorRecepcionAlmacenInterno;
 
     try {
-      if(data.estatus === 'pte_recepcion_ac' && pasarAPorEnviar){
+      if(data.estatus === 'pte_recepcion_ac' && pasarAPtePedidoEntreCompañias){
         await refaccionSolicitada.update(
           {
-            estatus: 'pte_enviar_ac'
+            estatus: 'pte_pedido_entre_companias'
           },
           {
            where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
@@ -614,7 +612,7 @@ module.exports = (app) => {
 
         await CambioEstatusRefaccion.create({
           id_refaccion_solicitada: data.id_refaccion_solicitada,
-          estatus: 'pte_enviar_ac',
+          estatus: 'pte_pedido_entre_companias',
           fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
         });
       }
