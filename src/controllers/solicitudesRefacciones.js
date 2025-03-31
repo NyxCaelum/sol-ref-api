@@ -142,14 +142,18 @@ module.exports = (app) => {
               [Op.or]: [
                 { estatus: null },
                 { estatus: { [Op.in]: [
-                'por_solicitar',
-                'pte_validar_sol_ac',
-                'solicitud_rechazada',
-                'en_proceso_compras',
-                'pte_recepcion_ac',
-                'pte_enviar_ac',
-                'por_recibir_ai',
-                'recibidas'
+                  'por_solicitar',
+                  'pte_validar_sol_ac',
+                  'solicitud_rechazada',
+                  'en_proceso_compras',
+                  'pte_recepcion_ac',
+                  'pte_enviar_ac',
+                  'pte_pedido_entre_companias',
+                  'pte_facturacion_entre_companias',
+                  'pte_autorizacion_compras_entre_companias',
+                  'pte_autorizacion_ci_entre_companias',
+                  'por_recibir_ai',
+                  'recibidas'
                 ] } }
               ]
               }
@@ -174,14 +178,18 @@ module.exports = (app) => {
               [Op.or]: [
                 { estatus: null },
                 { estatus: { [Op.in]: [
-                'por_solicitar',
-                'pte_validar_sol_ac',
-                'solicitud_rechazada',
-                'en_proceso_compras',
-                'pte_recepcion_ac',
-                'pte_enviar_ac',
-                'por_recibir_ai',
-                'recibidas'
+                  'por_solicitar',
+                  'pte_validar_sol_ac',
+                  'solicitud_rechazada',
+                  'en_proceso_compras',
+                  'pte_recepcion_ac',
+                  'pte_enviar_ac',
+                  'pte_pedido_entre_companias',
+                  'pte_facturacion_entre_companias',
+                  'pte_autorizacion_compras_entre_companias',
+                  'pte_autorizacion_ci_entre_companias',
+                  'por_recibir_ai',
+                  'recibidas'
                 ] } }
               ]
               }
@@ -296,6 +304,7 @@ module.exports = (app) => {
       let refacciones = req.body.data.refacciones;
       delete req.body.data.refacciones;
       let solicitud = req.body.data;
+      const estadoSolicitudAlRecibir = req.body.data.estado
       const solicitudCompleta = req.body.solicitudCompleta;
 
       const evidenciasSolicitudes = path.join(__dirname, '../../evidencias/solicitudes');
@@ -391,7 +400,9 @@ module.exports = (app) => {
           where: {
             id_solicitud: solicitud.id_solicitud,
           },
+          returning: true,
         });
+
 
         const idsRefaccionesExistentes = refacciones
           .filter(r => r.id_refaccion_solicitada !== undefined && r.id_refaccion_solicitada !== null)
@@ -466,7 +477,7 @@ module.exports = (app) => {
             }
           }
 
-          if(solicitudCompleta || solicitud.estado === 4){
+          if(solicitudCompleta || estadoSolicitudAlRecibir === 4){
               refaccion.estatus = 'pte_validar_sol_ac';
 
           // Trigger para almacenar información en cambio_estatus_refaccion
@@ -475,10 +486,6 @@ module.exports = (app) => {
               estatus: refaccion.estatus,
               fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
             });
-          }
-
-          if(refaccion.estatus === null){
-            refaccion.estatus = 'por_solicitar'
           }
 
           return {
@@ -509,8 +516,7 @@ module.exports = (app) => {
 
     try {
 
-      if(solicitud.comentario_rechazo_solicitud){
-
+      if(solicitud.comentario_rechazo_solicitud !== null || solicitud.comentario_rechazo_solicitud !== ''){
         solicitud.estado = 4;
 
         const solicitudActualizada = await Solicitud.update(solicitud, {

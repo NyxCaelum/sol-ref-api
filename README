@@ -1,3 +1,13 @@
+ESTADOS SOLICITUDES
+
+0 - POR SOLICITAR
+3 - PTE VALIDAR SOLICITUD POR PARTE DE AC
+4 - SOLICITUD RECHAZADA
+5 - EN PROCESO
+6 - FINALIZADA
+
+ESTATUS REFACCIONES
+
 por_solicitar
 por_autorizar_mtto         --Posible por quitar
 por_autorizar_solicitud_CI --Posible por quitar
