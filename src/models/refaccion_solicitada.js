@@ -27,8 +27,20 @@ module.exports = (sequelize, DataType) => {
             type: DataType.INTEGER,
             allowNull: true,
         },
+        fecha_compromiso_envio_ac: {
+            type: DataType.DATE,
+            allowNull: true,
+        },
         fecha_entrega: {
             type: DataType.DATE,
+            allowNull: true,
+        },
+        informacion_adicional_solicitada: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
+        informacion_adicional_otorgada: {
+            type: DataType.STRING(255),
             allowNull: true,
         },
         evidencia_core: {

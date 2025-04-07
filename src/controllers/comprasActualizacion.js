@@ -9,6 +9,7 @@ module.exports = app => {
     app.actualizacionCompras = async (req, res) => {
         let data = req.body.data;
         const pasarAPorRecepcion = req.body.pasarARecepcion;
+        const pasarAEntregaDirecta = req.body .pasarAEntregaDirecta;
         
         if(data.autorizacion_compras){
             data.fecha_autorizacion_compras =  moment().format('YYYY-MM-DD HH:mm:ss')
@@ -41,13 +42,99 @@ module.exports = app => {
                   fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
                 });
             }
+
+            if(pasarAEntregaDirecta){
+                await refaccionSolicitada.update(
+                    {
+                        estatus: 'por_recibir_ai'
+                    },
+                    {
+                        where: {
+                            id_refaccion_solicitada: data.id_refaccion_solicitada
+                        }
+                    }
+                )
+                await CambioEstatusRefaccion.create({
+                  id_refaccion_solicitada: data.id_refaccion_solicitada,
+                  estatus: 'por_recibir_ai',
+                  fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+                });
+            }
             
             return res.json({
                 OK: true,
-                msg: actualizacion
+                result: actualizacion
             });
         } catch (error) {
             console.error('Error en ActualizarSolicitud:', error);
+            return res.json(error);
+        }
+    }
+
+    app.solicitarInformacionAdicional = async (req, res) => {
+
+        const informacionSolicitada = req.body.informacion_adicional_solicitada;
+        const id_refaccion_solicitada = req.body.id_refaccion_solicitada;
+
+        try {
+            const solicitudActualizada = await refaccionSolicitada.update(
+                {
+                    informacion_adicional_solicitada: informacionSolicitada,
+                    estatus: 'informacion_adicional_solicitada'
+                },
+                {
+                    where:{
+                        id_refaccion_solicitada: id_refaccion_solicitada
+                    }
+                }
+            );
+
+            await CambioEstatusRefaccion.create({
+                id_refaccion_solicitada: id_refaccion_solicitada,
+                estatus: 'informacion_adicional_solicitada',
+                fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+            });
+
+            return res.json({
+                OK: true,
+                result: solicitudActualizada
+            });
+        } catch (error) {
+            console.error('Error en solicitarInformacionAdicional:', error);
+            return res.json(error);
+        }
+    }
+
+    app.informacionAdicionalOtorgada = async (req, res) => {
+
+        const informacionOtorgada = req.body.informacion_adicional_otorgada;
+        const id_refaccion_solicitada = req.body.id_refaccion_solicitada;
+
+        try {
+            const solicitudActualizada = await refaccionSolicitada.update(
+                {
+                    informacion_adicional_otorgada: informacionOtorgada,
+                    estatus: 'en_proceso_compras'
+                },
+                {
+                    where:{
+                        id_refaccion_solicitada: id_refaccion_solicitada
+                    }
+                }
+            );
+
+            await CambioEstatusRefaccion.create({
+                id_refaccion_solicitada: id_refaccion_solicitada,
+                estatus: 'en_proceso_compras',
+                fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+            });
+
+            return res.json({
+                OK: true,
+                result: solicitudActualizada
+            });
+        } catch (error) {
+            console.error('Error en solicitarInformacionAdicional:', error);
             return res.json(error);
         }
     }

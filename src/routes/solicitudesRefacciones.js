@@ -13,6 +13,7 @@ module.exports = app => {
     
     app.patch('/almacencentral/recepcionenvio', [verificarToken], SolicitudesRefacciones.cambiarEstatusAlmacenCentral);
 
-    app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion);
+    app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion)
 
+    // app.get('/numero_eco/obtener', SolicitudesRefacciones.ObtenerNumEconomico);
 }
