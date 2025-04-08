@@ -4,8 +4,8 @@ const path = require('path');
 const sequelize = require('sequelize');
 const { Op } = require('sequelize');
 
-const sql = require('mssql')
-const sqlConfig = require('../libs/configMSSQL');
+// const sql = require('mssql')
+// const sqlConfig = require('../libs/configMSSQL');
 
 // Función para guardar archivos en base64
 
@@ -30,10 +30,36 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   if (type === 'solicitud') {
     filename = `${filenamePrefix}_${DateFormated}_${solicitud.unidad}_${solicitud.ot}.${extension}`;
   } else if (type === 'refaccion') {
-    console.log(solicitud)
+    console.log(solicitud);
     filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_solicitud}_${solicitud.id_refaccion}.${extension}`;
   }
   const filePath = path.join(folder, filename);
+  fs.writeFileSync(filePath, buffer);
+  return filename;
+}
+
+function saveBase64FileEvidenciaEntrega(base64Data, data, type) {
+
+  const evidenciaEntregadasPath = path.join(__dirname, '../../evidencias/entregadas');
+
+  if (!fs.existsSync(evidenciaEntregadasPath)) {
+    fs.mkdirSync(evidenciaEntregadasPath, { recursive: true });
+  }
+
+  const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    throw new Error('Formato base64 inválido');
+  }
+
+  const DateFormated = moment().format('DD.MM.YYYY_hh.mm');
+
+  const mimeType = matches[1];
+  const extension = mimeType.split('/')[1];
+
+  const buffer = Buffer.from(matches[2], 'base64');
+  let filename = `${type}_${DateFormated}_${data.id_refaccion_solicitada}_${data.unidad}_${data.ot}.${extension}`;
+  
+  const filePath = path.join(evidenciaEntregadasPath, filename);
   fs.writeFileSync(filePath, buffer);
   return filename;
 }
@@ -145,12 +171,10 @@ module.exports = (app) => {
               'en_proceso_compras',
               'pte_recepcion_ac',
               'pte_enviar_ac',
-              'pte_pedido_entre_companias',
-              'pte_facturacion_entre_companias',
-              'pte_autorizacion_compras_entre_companias',
-              'pte_autorizacion_ci_entre_companias',
+              'informacion_adicional_solicitada',
               'por_recibir_ai',
-              'recibidas'
+              'devolucion',
+              'recibida_ai'
             ] } }
           ]
           }
@@ -181,12 +205,10 @@ module.exports = (app) => {
               'en_proceso_compras',
               'pte_recepcion_ac',
               'pte_enviar_ac',
-              'pte_pedido_entre_companias',
-              'pte_facturacion_entre_companias',
-              'pte_autorizacion_compras_entre_companias',
-              'pte_autorizacion_ci_entre_companias',
+              'informacion_adicional_solicitada',
               'por_recibir_ai',
-              'recibidas'
+              'devolucion',
+              'recibida_ai'
             ] } }
             ]
           }
@@ -282,7 +304,7 @@ module.exports = (app) => {
         WHERE
           SOL.unidad = :unidad
           AND SOL.ot = :ot
-          AND REF_SOL.estatus <> 'recibidas'
+          AND REF_SOL.estatus <> 'recibida_ai'
         `,
         {
           replacements: { 
@@ -613,7 +635,7 @@ module.exports = (app) => {
 
         const solicitudActualizada = await Solicitud.update(solicitud, {
           where: {id_solicitud: solicitud.id_solicitud}
-        })
+        });
 
         const refaccionesActualizadas = await Promise.all(
           refacciones.map(async (refaccion) => {
@@ -663,7 +685,7 @@ module.exports = (app) => {
             }
 
             await refaccionSolicitada.update(
-              { 
+              {
                 estatus: refaccion.estatus,
                 numero_pedido: refaccion.numero_pedido
               },
@@ -756,15 +778,30 @@ module.exports = (app) => {
   }
 
   app.confirmarRecepcion = async (req, res) => {
-    const data = req.body.data;
-    const confirmarRecepcionAI = req.body.confirmarRecepcionAI;
+    console.log(req.body)
+    const data = req.body;
+
+    let evidencia_refaccion_entregado;
+    let evidencia_numeroParte_entregado;
 
     try {
-      if(confirmarRecepcionAI){
+
+      if(data.confirmarRecepcion){
+
+        if(data.evidencia_refaccion_entregado){
+          evidencia_refaccion_entregado = saveBase64FileEvidenciaEntrega(data.evidencia_refaccion_entregado, data, 'evidencia_refaccion_entregado');
+        }
+  
+        if(data.evidencia_numeroParte_entregado){
+          evidencia_numeroParte_entregado = saveBase64FileEvidenciaEntrega(data.evidencia_numeroParte_entregado, data, 'evidencia_numeroParte_entregado');
+        }
+
         await refaccionSolicitada.update(
           {
-            estatus: 'recibidas',
-            fecha_entrega: moment()
+            estatus: 'recibida_ai',
+            fecha_entrega: moment(),
+            evidencia_refaccion_entregado: evidencia_refaccion_entregado,
+            evidencia_numeroParte_entregado: evidencia_numeroParte_entregado
           },
           {
            where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
@@ -773,7 +810,26 @@ module.exports = (app) => {
 
         await CambioEstatusRefaccion.create({
           id_refaccion_solicitada: data.id_refaccion_solicitada,
-          estatus: 'recibidas',
+          estatus: 'recibida_ai',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        });
+      }
+
+      if(data.devolucion){
+        await refaccionSolicitada.update(
+          {
+            estatus: 'devolucion',
+            fecha_entrega: moment(),
+            causa_de_devolucion: data.causa_de_devolucion,
+          },
+          {
+           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
+          }
+        );
+
+        await CambioEstatusRefaccion.create({
+          id_refaccion_solicitada: data.id_refaccion_solicitada,
+          estatus: 'devolucion',
           fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
         });
       }
