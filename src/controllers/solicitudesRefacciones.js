@@ -28,10 +28,10 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   const buffer = Buffer.from(matches[2], 'base64');
   let filename;
   if (type === 'solicitud') {
-    filename = `${filenamePrefix}_${DateFormated}_${solicitud.unidad}_${solicitud.ot}.${extension}`;
+    // console.log(solicitud);
+    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_base}_${solicitud.unidad}_${solicitud.ot}_${solicitud.id_solicitud}.${extension}`;
   } else if (type === 'refaccion') {
-    console.log(solicitud);
-    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_solicitud}_${solicitud.id_refaccion}.${extension}`;
+    filename = `${filenamePrefix}_${DateFormated}_${solicitud.id_refaccion_solicitada}_${solicitud.id_refaccion}.${extension}`;
   }
   const filePath = path.join(folder, filename);
   fs.writeFileSync(filePath, buffer);
@@ -138,7 +138,7 @@ module.exports = (app) => {
             as: 'refaccionesSolicitadas'
             }
           ],
-          limit: base === 3 ? 100 : 50
+          limit: base === 3 ? 140 : 70
         });
         
         const refaccionesPorEstatusCriticas = await refaccionSolicitada.findAll({
@@ -622,7 +622,7 @@ module.exports = (app) => {
 
   app.ActualizarValidarSolicitud = async (req, res) => {
 
-    console.log(req.body);
+    // console.log(req.body);
 
     let refacciones = req.body.refacciones;
     delete req.body.refacciones;
@@ -778,7 +778,7 @@ module.exports = (app) => {
   }
 
   app.confirmarRecepcion = async (req, res) => {
-    console.log(req.body)
+    // console.log(req.body);
     const data = req.body;
 
     let evidencia_refaccion_entregado;
