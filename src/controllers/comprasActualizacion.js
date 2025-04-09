@@ -18,8 +18,22 @@ module.exports = app => {
         if(data.autorizacion_ci){
             data.autorizacion_ci = moment().format('YYYY-MM-DD HH:mm:ss')
         }
-
+        
         try {
+            
+            if(data.orden_compra){
+    
+                const check = await comprasActualizacion.findOne({
+                    where: {
+                        id_compras_actualizacion: data.id_compras_actualizacion
+                    }
+                })
+    
+                if(check.orden_compra === null){
+                    data.fecha_oc = moment().format('YYYY-MM-DD HH:mm:ss')   
+                }
+            }
+
             const actualizacion = await comprasActualizacion.upsert(data, {
                 returning: true,
                 conflictFields: ['id_compras_actualizacion']

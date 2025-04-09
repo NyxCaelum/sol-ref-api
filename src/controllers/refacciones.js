@@ -11,7 +11,16 @@ module.exports = (app) => {
         const refacciones = req.body;
 
         try {
-            const NuevasRefacciones = await Refacciones.bulkCreate(refacciones);
+            const NuevasRefacciones = [];
+            for (const refaccion of refacciones) {
+              const [nuevaRefaccion, created] = await Refacciones.findOrCreate({
+                where: { clave: refaccion.clave },
+                defaults: refaccion
+              });
+              if (created) {
+                NuevasRefacciones.push(nuevaRefaccion);
+              }
+            }
     
             return res.json({
                 OK: true,
