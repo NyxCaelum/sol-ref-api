@@ -154,8 +154,10 @@ module.exports = (app) => {
             as: 'solicitud',
               where: {
               ...opcionBase,
-              [Op.or]: [
+              [Op.and]: [
                 { carril: { [Op.ne]: null } },
+                { carril: { [Op.ne]: '' } },
+                { carril: { [Op.ne]: 'CUARENTENA' } }
               ]
             }
           }
