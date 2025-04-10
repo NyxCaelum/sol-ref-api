@@ -22,8 +22,10 @@ app.use(express.urlencoded({extended: true, limit: '500mb', parameter: 500000}))
 app.use(express.json({limit: '500mb'}));
 app.use('/evidencias', express.static('evidencias'));
 app.use(cookieParser());
-app.use(cors());
-
+app.use(cors({
+  origin: "https://suite-mantenimiento.tlea.online",
+  credentials: true
+}));
 
 consign({cwd: 'src'})
 .include('libs/config.js')
