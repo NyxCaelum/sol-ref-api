@@ -7,83 +7,79 @@ module.exports = app => {
     const refaccionSolicitada = app.database.models.Refaccion_solicitada;
 
     app.actualizacionCompras = async (req, res) => {
-        let data = req.body.data;
-        const pasarAPorRecepcion = req.body.pasarARecepcion;
-        const pasarAEntregaDirecta = req.body .pasarAEntregaDirecta;
-        
-        if(data.autorizacion_compras){
-            data.fecha_autorizacion_compras =  moment().format('YYYY-MM-DD HH:mm:ss')
-        }
-        
-        if(data.autorizacion_ci){
-            data.autorizacion_ci = moment().format('YYYY-MM-DD HH:mm:ss')
-        }
-        
+        const t = await app.database.sequelize.transaction();
         try {
-            
-            if(data.orden_compra){
-    
-                const check = await comprasActualizacion.findOne({
-                    where: {
-                        id_compras_actualizacion: data.id_compras_actualizacion
-                    }
-                })
-    
-                if(check.orden_compra === null){
-                    data.fecha_oc = moment().format('YYYY-MM-DD HH:mm:ss')   
-                }
+          const data = { ...req.body.data };
+          const { pasarARecepcion, pasarAEntregaDirecta } = req.body;
+      
+          let registro = await comprasActualizacion.findOne({
+            where: { id_refaccion_solicitada: data.id_refaccion_solicitada },
+            transaction: t,
+          });
+      
+          if (data.autorizacion_compras) {
+            if (!registro || registro.fecha_autorizacion_compras === null) {
+              data.fecha_autorizacion_compras = moment().format('YYYY-MM-DD HH:mm:ss');
             }
-
-            const actualizacion = await comprasActualizacion.upsert(data, {
-                returning: true,
-                conflictFields: ['id_compras_actualizacion']
+          }
+          if (data.autorizacion_ci) {
+            if (!registro || registro.fecha_autorizacion_ci === null) {
+              data.fecha_autorizacion_ci = moment().format('YYYY-MM-DD HH:mm:ss');
+            }
+          }
+          if (data.orden_compra) {
+            if (!registro || registro.orden_compra === null) {
+              data.fecha_oc = moment().format('YYYY-MM-DD HH:mm:ss');
+            }
+          }
+      
+          if (registro) {
+            await comprasActualizacion.update(data, {
+              where: { id_compras_actualizacion: data.id_compras_actualizacion },
+              transaction: t,
             });
-            
-            if(pasarAPorRecepcion){
-                await refaccionSolicitada.update(
-                    {
-                        estatus: 'pte_recepcion_ac'
-                    },
-                    {
-                        where: {
-                            id_refaccion_solicitada: data.id_refaccion_solicitada
-                        }
-                    }
-                )
-                await CambioEstatusRefaccion.create({
-                  id_refaccion_solicitada: data.id_refaccion_solicitada,
-                  estatus: 'pte_recepcion_ac',
-                  fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-                });
-            }
-
-            if(pasarAEntregaDirecta){
-                await refaccionSolicitada.update(
-                    {
-                        estatus: 'por_recibir_ai'
-                    },
-                    {
-                        where: {
-                            id_refaccion_solicitada: data.id_refaccion_solicitada
-                        }
-                    }
-                )
-                await CambioEstatusRefaccion.create({
-                  id_refaccion_solicitada: data.id_refaccion_solicitada,
-                  estatus: 'por_recibir_ai',
-                  fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-                });
-            }
-            
-            return res.json({
-                OK: true,
-                result: actualizacion
-            });
+          } else {
+            registro = await comprasActualizacion.create(data, { transaction: t });
+          }
+      
+          if (pasarARecepcion) {
+            await refaccionSolicitada.update(
+              { estatus: 'pte_recepcion_ac' },
+              {
+                where: { id_refaccion_solicitada: data.id_refaccion_solicitada },
+                transaction: t,
+              }
+            );
+            await CambioEstatusRefaccion.create({
+              id_refaccion_solicitada: data.id_refaccion_solicitada,
+              estatus: 'pte_recepcion_ac',
+              fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+            }, { transaction: t });
+          }
+      
+          if (pasarAEntregaDirecta) {
+            await refaccionSolicitada.update(
+              { estatus: 'por_recibir_ai' },
+              {
+                where: { id_refaccion_solicitada: data.id_refaccion_solicitada },
+                transaction: t,
+              }
+            );
+            await CambioEstatusRefaccion.create({
+              id_refaccion_solicitada: data.id_refaccion_solicitada,
+              estatus: 'por_recibir_ai',
+              fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+            }, { transaction: t });
+          }
+      
+          await t.commit();
+          return res.json({ OK: true, result: registro });
         } catch (error) {
-            console.error('Error en ActualizarSolicitud:', error);
-            return res.json(error);
+          await t.rollback();
+          console.error('Error en actualizacionCompras:', error);
+          return res.status(500).json({ OK: false, error: error.message });
         }
-    }
+      };
 
     app.solicitarInformacionAdicional = async (req, res) => {
 

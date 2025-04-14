@@ -13,8 +13,10 @@ const io = require('socket.io')(http, {
     methods: ["GET", "POST"],
     credentials: true
   }
+  // cors:{
+  //   origin: "*",
+  // }
 });
-
 
 app.use(express.static('./public'));
 app.set('port', process.env.PORT || 3009);
@@ -22,8 +24,9 @@ app.use(express.urlencoded({extended: true, limit: '500mb', parameter: 500000}))
 app.use(express.json({limit: '500mb'}));
 app.use('/evidencias', express.static('evidencias'));
 app.use(cookieParser());
+// app.use(cors());
 app.use(cors({
-  origin: "https://suite-mantenimiento.tlea.online", // sin slash
+  origin: "https://suite-mantenimiento.tlea.online",
   credentials: true
 }));
 

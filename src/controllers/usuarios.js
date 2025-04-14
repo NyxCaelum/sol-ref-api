@@ -61,7 +61,7 @@ module.exports = app => {
     app.ActualizarUsuario = (req, res) => {
         let id = req.params.id;
         let body = req.body;   
-        let fields = ['nombre_empleado', 'nombre_usuario', 'id_role', 'status', 'cargo']     
+        let fields = ['nombre_empleado', 'nombre_usuario', 'id_role', 'id_base','status'];
 
         let usuario = new Usuario();        
 
@@ -70,9 +70,9 @@ module.exports = app => {
                 nombre_empleado: body.nombre_empleado,
                 nombre_usuario: body.nombre_usuario,
                 contrasena: bcrypt.hashSync(body.contrasena, 10),
-                id_role: body.role,
+                id_role: body.id_role,
+                id_base: body.id_base,
                 status: 'A',
-                cargo: body.cargo,
             });
 
             fields.push('contrasena');
@@ -81,10 +81,12 @@ module.exports = app => {
                 nombre_empleado: body.nombre_empleado,
                 nombre_usuario: body.nombre_usuario,                
                 id_role: body.id_role,
+                id_base: body.id_base,
                 status: 'A',
-                cargo: body.cargo,
             });
         }
+
+        console.log(usuario.dataValues);
 
         Usuario.update(usuario.dataValues, {
             where: {
