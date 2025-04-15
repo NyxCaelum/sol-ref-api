@@ -63,6 +63,22 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(45),
             allowNull: true,
         },
+        evidencia_refaccion_entregado: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
+        evidencia_numeroParte_entregado: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
+        causa_de_devolucion: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
+        causa_de_cancelar: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        }
     }, {
         tableName: 'refaccion_solicitada',
         timestamps: false,

@@ -177,7 +177,8 @@ module.exports = (app) => {
               'informacion_adicional_solicitada',
               'por_recibir_ai',
               'devolucion',
-              'recibida_ai'
+              'recibida_ai',
+              'cancelada',
             ] } }
           ]
           }
@@ -211,7 +212,8 @@ module.exports = (app) => {
               'informacion_adicional_solicitada',
               'por_recibir_ai',
               'devolucion',
-              'recibida_ai'
+              'recibida_ai',
+              'cancelada',
             ] } }
             ]
           }
@@ -501,7 +503,7 @@ module.exports = (app) => {
           if (actualesById.has(r.id_refaccion_solicitada)) {
             toUpdate.push(r);
           } else {
-            // id inválido: tratamos como nueva
+            // id invalido = como nueva
             r.id_refaccion_solicitada = null;
             toCreate.push(r);
           }
@@ -858,10 +860,16 @@ module.exports = (app) => {
 
   app.cancelarSolicitudDeRefaccion = async (req, res) => {
     const id_refaccion_solicitada = req.params.id_refaccion_solicitada;
+    const { causa_de_cancelar } = req.body;
+
+    // console.log(id_refaccion_solicitada, causa_de_cancelar)
     
     try {
       const cancelacion = await refaccionSolicitada.update(
-        { estatus: 'cancelada' }, 
+        {
+          estatus: 'cancelada',
+          causa_de_cancelar: causa_de_cancelar,
+        },
         { where: {id_refaccion_solicitada: id_refaccion_solicitada}}
       );
 
