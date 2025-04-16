@@ -326,12 +326,12 @@ module.exports = (app) => {
           claves.includes(solicitud.clave)
         );
 
-        if(clavesCoincidentes.length > 0){
-          return res.json({
-            OK: false,
-            clavesCoincidentes
-          });
-        }
+        // if(clavesCoincidentes.length > 0){
+        //   return res.json({
+        //     OK: false,
+        //     clavesCoincidentes
+        //   });
+        // }
 
         if(clavesCoincidentes.length === 0 && !confirmarSolicitudConMismaOTyUnidad){
           return res.json({
