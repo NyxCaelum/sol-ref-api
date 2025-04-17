@@ -22,17 +22,19 @@ module.exports = app => {
               data.fecha_autorizacion_compras = moment().format('YYYY-MM-DD HH:mm:ss');
             }
           }
+          
           if (data.autorizacion_ci) {
             if (!registro || registro.fecha_autorizacion_ci === null) {
               data.fecha_autorizacion_ci = moment().format('YYYY-MM-DD HH:mm:ss');
             }
           }
+
           if (data.orden_compra) {
             if (!registro || registro.orden_compra === null) {
               data.fecha_oc = moment().format('YYYY-MM-DD HH:mm:ss');
             }
           }
-      
+
           if (registro) {
             await comprasActualizacion.update(data, {
               where: { id_compras_actualizacion: data.id_compras_actualizacion },

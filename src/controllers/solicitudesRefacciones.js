@@ -275,6 +275,138 @@ module.exports = (app) => {
   //   }
   // }
 
+  app.ReporteRefaccionesPendientes = async (req, res) => {
+
+    try {
+      const solicitudes = await app.database.sequelize.query(
+        `
+          SELECT
+            CASE
+              WHEN REF_SOL.estatus = 'pte_validar_sol_ac' THEN 'Por validar ac'
+              WHEN REF_SOL.estatus = 'solicitud_rechazada' THEN 'Solicitud rechazada'
+              WHEN REF_SOL.estatus = 'en_proceso_compras' THEN 'En proceso compras'
+              WHEN REF_SOL.estatus = 'informacion_adicional_solicitada' THEN 'En proceso compras'
+              WHEN REF_SOL.estatus = 'pte_recepcion_ac' THEN 'Por recepcion en almacen central'
+              WHEN REF_SOL.estatus = 'pte_enviar_ac' THEN 'Por enviar almacen central'
+              WHEN REF_SOL.estatus = 'por_recibir_ai' THEN 'Por recibir almacen interno'
+              WHEN REF_SOL.estatus = 'recibida_ai' THEN 'Recibido en almacen interno'
+            ELSE REF_SOL.estatus
+            END AS 'ESTATUS',
+            SOL.carril AS 'CARRIL',
+            BAS.base AS 'BASE',
+            SOL.unidad AS 'UNIDAD',
+            REF_SOL.cantidad AS 'CANTIDAD',
+            REF_CAT.refaccion AS 'REFACCION',
+            SOL.OT AS 'OT',
+            DATEDIFF(
+              IFNULL(REF_SOL.fecha_entrega, CURDATE()),
+              SOL.fecha_solicitud_completa
+            ) AS 'DIAS DESDE SOLICITUD',
+            DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y') AS 'FECHA SOLICITUD',
+            DATE_FORMAT(REF_SOL.fecha_compromiso_envio_ac, '%d/%m/%Y') AS 'FECHA COMPROMISO AC',
+            DATE_FORMAT(COM_ACT.fecha_compromiso, '%d/%m/%Y') AS 'FECHA COMPROMISO COMPRAS',
+            DATE_FORMAT(REF_SOL.fecha_entrega, '%d/%m/%Y') AS 'FECHA ENTREGA',
+            DATEDIFF(REF_SOL.fecha_entrega, SOL.fecha_solicitud_completa) AS 'DIAS DESDE SOLICITUD HASTA ENTREGA'
+          FROM
+            solicitud AS SOL
+              LEFT JOIN base AS BAS ON SOL.id_base = BAS.id_base
+              LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+              LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
+              LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
+          WHERE
+            REF_SOL.estatus IS NOT NULL
+              AND REF_SOL.estatus <> 'cancelada'
+              AND REF_SOL.estatus <> 'por_solicitar'
+          ORDER BY
+            SOL.fecha_solicitud_completa ASC
+          LIMIT 100;
+        `,
+        {
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+
+      return res.json({ 
+        OK: true,
+        result: solicitudes
+      });
+
+    } catch (error) {
+      console.error('Error en ActualizarSolicitud:', error);
+      return res.json(error);
+    }
+  }
+
+  app.ExportarRefacciones = async (req, res) => {
+
+    try {
+      const solicitudes = await app.database.sequelize.query(
+        `
+        SELECT
+          BAS.base AS 'BASE',
+          SOL.unidad AS 'UNIDAD',
+          SOL.carril AS 'CARRIL',
+          REF_SOL.cantidad AS 'CANTIDAD',
+          REF_CAT.clave AS 'CLAVE',
+          REF_CAT.refaccion AS 'REFACCION',
+          SOL.OT AS 'OT',
+          DATEDIFF(
+            IFNULL(REF_SOL.fecha_entrega, CURDATE()),
+            SOL.fecha_solicitud_completa
+          ) AS 'DIAS DESDE SOLICITUD',
+          DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y') AS 'FECHA SOLICITUD',
+          CASE
+            WHEN REF_SOL.core = 1 THEN 'CORE'
+            WHEN REF_SOL.core = 0 THEN 'AUTORIZACION'
+          END AS 'CORE/AUTO',
+          REF_SOL.numero_pedido AS 'NUMERO PEDIDO',
+          COM_ACT.proveedor AS 'PROVEEDOR',
+          DATE_FORMAT(COM_ACT.fecha_oc, '%d/%m/%Y') AS 'FECHA OC',
+          COM_ACT.orden_compra AS 'ORDEN COMPRA',
+          DATE_FORMAT(COM_ACT.fecha_compromiso, '%d/%m/%Y') AS 'FECHA COMPROMISO COMPRAS',
+          DATE_FORMAT(REF_SOL.fecha_compromiso_envio_ac, '%d/%m/%Y') AS 'FECHA COMPROMISO AC',
+          DATE_FORMAT(REF_SOL.fecha_entrega, '%d/%m/%Y') AS 'FECHA ENTREGA',
+          CASE
+            WHEN REF_SOL.estatus = 'pte_validar_sol_ac' THEN 'Por validar ac'
+            WHEN REF_SOL.estatus = 'solicitud_rechazada' THEN 'Solicitud rechazada'
+            WHEN REF_SOL.estatus = 'en_proceso_compras' THEN 'En proceso compras'
+            WHEN REF_SOL.estatus = 'informacion_adicional_solicitada' THEN 'En proceso compras'
+            WHEN REF_SOL.estatus = 'pte_recepcion_ac' THEN 'Por recepcion en almacen central'
+            WHEN REF_SOL.estatus = 'pte_enviar_ac' THEN 'Por enviar almacen central'
+            WHEN REF_SOL.estatus = 'por_recibir_ai' THEN 'Por recibir almacen interno'
+            WHEN REF_SOL.estatus = 'recibida_ai' THEN 'Recibido en almacen interno'
+            ELSE REF_SOL.estatus
+          END AS 'ESTATUS'
+        FROM
+          solicitud AS SOL
+            LEFT JOIN base AS BAS ON SOL.id_base = BAS.id_base
+            LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+            LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
+            LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
+        WHERE
+          REF_SOL.estatus IS NOT NULL
+            AND REF_SOL.estatus <> 'cancelada'
+            AND REF_SOL.estatus <> 'por_solicitar'
+        ORDER BY
+          SOL.fecha_solicitud_completa ASC
+        LIMIT 100;
+        `,
+        {
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+
+      return res.json({ 
+        OK: true,
+        result: solicitudes
+      });
+
+    } catch (error) {
+      console.error('Error en ActualizarSolicitud:', error);
+      return res.json(error);
+    }
+  }
+
   app.NuevaSolicitud = async (req, res) => {
     let refacciones = req.body.data.refacciones;
     delete req.body.data.refacciones;

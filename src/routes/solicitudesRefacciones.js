@@ -3,6 +3,10 @@ module.exports = app => {
     const SolicitudesRefacciones = app.controllers.solicitudesRefacciones;
     const { verificarToken } = app.middlewares.auth;
 
+    app.get('/solicitudes/reporte', SolicitudesRefacciones.ReporteRefaccionesPendientes);
+    
+    app.get('/solicitudes/exportarRefaccionesPendientes', SolicitudesRefacciones.ExportarRefacciones);
+
     app.get('/solicitudes/:base', SolicitudesRefacciones.SolicitudesPte);
 
     app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);
@@ -18,6 +22,6 @@ module.exports = app => {
     app.delete('/solicitudes/eliminar/:id_solicitud', SolicitudesRefacciones.eliminarSolicitud);
 
     app.post('/solicitudes/cancelar/:id_refaccion_solicitada', SolicitudesRefacciones.cancelarSolicitudDeRefaccion);
-
+    
     // app.get('/numero_eco/obtener', SolicitudesRefacciones.ObtenerNumEconomico);
 }
