@@ -139,7 +139,8 @@ module.exports = (app) => {
             as: 'refaccionesSolicitadas'
             }
           ],
-          limit: base === 3 ? 140 : 70
+          order: [['fecha_inicio_solicitud', 'DESC']],
+          limit: base === 3 ? 300 : 150
         });
         
         const refaccionesPorEstatusCriticas = await refaccionSolicitada.findAll({
@@ -458,7 +459,7 @@ module.exports = (app) => {
           claves.includes(solicitud.clave)
         );
 
-        // if(clavesCoincidentes.length > 0){
+        // if(clavesCoincidentes.length > 0 && !solicitud.causa_solicitud_nuevamente){
         //   return res.json({
         //     OK: false,
         //     clavesCoincidentes
@@ -517,9 +518,7 @@ module.exports = (app) => {
 
         if(refaccion.evidencia_reporte_danos){
           refaccion.evidencia_reporte_danos = saveBase64File(refaccion.evidencia_reporte_danos, evidenciaRefacciones, 'evidencia_reporte_danos', refaccion, 'refaccion');
-
         }
-
         return refaccion;
       })
 
