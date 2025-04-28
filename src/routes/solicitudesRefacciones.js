@@ -9,6 +9,8 @@ module.exports = app => {
 
     app.get('/solicitudes/:base', SolicitudesRefacciones.SolicitudesPte);
 
+    app.get('/solicitudes/TiemposEnProceso/:fechaInicio/:fechaFin', SolicitudesRefacciones.TiemposEnProceso);
+
     app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);
 
     app.patch('/solicitudes/actualizarsolicitud', [verificarToken], SolicitudesRefacciones.ActualizarSolicitud);
@@ -19,9 +21,9 @@ module.exports = app => {
 
     app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion);
 
-    app.delete('/solicitudes/eliminar/:id_solicitud', SolicitudesRefacciones.eliminarSolicitud);
-
     app.post('/solicitudes/cancelar/:id_refaccion_solicitada', SolicitudesRefacciones.cancelarSolicitudDeRefaccion);
+    
+    app.delete('/solicitudes/eliminar/:id_solicitud', SolicitudesRefacciones.eliminarSolicitud);
     
     // app.get('/numero_eco/obtener', SolicitudesRefacciones.ObtenerNumEconomico);
 }

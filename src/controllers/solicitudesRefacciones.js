@@ -111,7 +111,7 @@ module.exports = (app) => {
                   required: false,
                   as: 'comprasActualizacion'
                 },
-                { 
+                {
                   model: CambioEstatusRefaccion,
                   required: false,
                   as: 'cambiosEstatus',
@@ -242,6 +242,68 @@ module.exports = (app) => {
           return res.json(error);
       }
   };
+
+  app.TiemposEnProceso = async (req, res) => {
+
+    try {
+      
+      const { fechaInicio, fechaFin } = req.params;
+
+      let whereClause = '';
+      if (fechaInicio && fechaFin) {
+        whereClause = `WHERE SOL.fecha_solicitud_completa BETWEEN '${fechaInicio}' AND '${fechaFin}'`;
+      }
+
+      const solicitudes = await app.database.sequelize.query(
+        `
+          SELECT
+            CASE
+              WHEN SOL.id_base = 1 THEN 'SALINAS'
+              WHEN SOL.id_base = 2 THEN 'SALAMANCA'
+            END AS 'BASE',
+            SOL.id_solicitud AS 'FOLIO SOLICITUD',
+            REF_SOL.id_refaccion_solicitada AS 'FOLIO REFACCION',
+            SOL.unidad,
+            DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y %H:%i') AS 'FECHA SOLICITUD',
+            DATE_FORMAT(REF_SOL.fecha_entrega, '%d/%m/%Y %H:%i') AS 'FECHA ENTREGA',
+            REF_CAT.refaccion,
+            CAM.estatus,
+            DATE_FORMAT(CAM.fecha_cambio, '%d/%m/%Y %H:%i') AS 'FECHA CAMBIO',
+            LAG(CAM.estatus) OVER (PARTITION BY REF_SOL.id_refaccion_solicitada ORDER BY CAM.fecha_cambio) AS estatus_anterior,
+            DATE_FORMAT(
+              LAG(CAM.fecha_cambio) OVER (PARTITION BY REF_SOL.id_refaccion_solicitada ORDER BY CAM.fecha_cambio),
+              '%d/%m/%Y %H:%i'
+            ) AS 'FECHA ANTERIOR ESTATUS',
+            TIMESTAMPDIFF(
+                MINUTE,
+                LAG(CAM.fecha_cambio) OVER (PARTITION BY REF_SOL.id_refaccion_solicitada ORDER BY CAM.fecha_cambio),
+                CAM.fecha_cambio
+            ) AS 'MINUTOS ENTRE ESTATUS ANTERIOR',
+            TIMESTAMPDIFF(
+                MINUTE,
+                SOL.fecha_solicitud_completa,
+                REF_SOL.fecha_entrega
+            ) AS 'MINUTOS SOLICITUD HASTA ENTREGA'
+          FROM
+            solicitud AS SOL
+            LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+            LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
+            LEFT JOIN cambio_estatus_refaccion AS CAM ON REF_SOL.id_refaccion_solicitada = CAM.id_refaccion_solicitada
+          ${whereClause};
+        `,
+        {
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+
+      return res.json(solicitudes);
+
+    } catch (err) {
+      console.error('Error en SolicitudesPte:', error);
+      return res.json(error);
+    }
+    
+  }
 
   // app.ObtenerNumEconomico = async (req, res) => {
 
