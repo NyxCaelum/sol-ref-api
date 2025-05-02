@@ -182,7 +182,8 @@ module.exports = (app) => {
               'cancelada',
             ] } }
           ]
-          }
+          },
+          limit: base === 3 ? 300 : 150
         });
 
         const refaccionesPorEstatusTodas = await refaccionSolicitada.findAll({
@@ -217,7 +218,8 @@ module.exports = (app) => {
               'cancelada',
             ] } }
             ]
-          }
+          },
+          limit: base === 3 ? 300 : 150
         });
 
         const conteoPorEstatusCriticas = refaccionesPorEstatusCriticas.reduce((acc, item) => {
@@ -265,6 +267,8 @@ module.exports = (app) => {
             REF_SOL.id_refaccion_solicitada AS 'FOLIO REFACCION',
             SOL.unidad,
             DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y %H:%i') AS 'FECHA SOLICITUD',
+            DATE_FORMAT(REF_SOL.fecha_compromiso_envio_ac, '%d/%m/%Y %H:%i') AS 'FECHA COMPROMISO AC',
+            DATE_FORMAT(COM.fecha_compromiso, '%d/%m/%Y %H:%i') AS 'FECHA COMPROMISO COMPRAS',
             DATE_FORMAT(REF_SOL.fecha_entrega, '%d/%m/%Y %H:%i') AS 'FECHA ENTREGA',
             REF_CAT.refaccion,
             CAM.estatus,
@@ -287,6 +291,7 @@ module.exports = (app) => {
           FROM
             solicitud AS SOL
             LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+            LEFT JOIN compras_actualizacion as COM ON REF_SOL.id_refaccion_solicitada = COM.id_refaccion_solicitada
             LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
             LEFT JOIN cambio_estatus_refaccion AS CAM ON REF_SOL.id_refaccion_solicitada = CAM.id_refaccion_solicitada
           ${whereClause};
@@ -381,8 +386,8 @@ module.exports = (app) => {
               AND REF_SOL.estatus <> 'cancelada'
               AND REF_SOL.estatus <> 'por_solicitar'
           ORDER BY
-            SOL.fecha_solicitud_completa ASC
-          LIMIT 100;
+            SOL.fecha_solicitud_completa DESC
+          LIMIT 150;
         `,
         {
           type: sequelize.QueryTypes.SELECT,
@@ -451,8 +456,8 @@ module.exports = (app) => {
             AND REF_SOL.estatus <> 'cancelada'
             AND REF_SOL.estatus <> 'por_solicitar'
         ORDER BY
-          SOL.fecha_solicitud_completa ASC
-        LIMIT 100;
+          SOL.fecha_solicitud_completa DESC
+        LIMIT 150;
         `,
         {
           type: sequelize.QueryTypes.SELECT,
