@@ -13,6 +13,7 @@ module.exports = (app) => {
         try {
             const NuevasRefacciones = [];
             for (const refaccion of refacciones) {
+
               const [nuevaRefaccion, created] = await Refacciones.findOrCreate({
                 where: { clave: refaccion.clave },
                 defaults: refaccion
@@ -28,6 +29,50 @@ module.exports = (app) => {
             });
         } catch (error) {
             return res.json(error);
+        }
+    }
+
+    app.TodasLasRefacciones = async (req, res) => {
+        try {
+          const refacciones = await Refacciones.findAll({
+              order: [['id_refaccion', 'ASC']]
+          });
+          return res.json({
+            OK: true,
+            result: refacciones
+          });
+        } catch (error) {
+            console.error('Error al obtener todas las refacciones:', error);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    }
+
+    app.ActualizarInformacionRefaccion = async (req, res) => {
+        const { id_refaccion, clave, refaccion, stock_alm_central, stock_alm_salinas, stock_alm_salamanca } = req.body;
+
+        try {
+
+            const refaccionExistente = await Refacciones.findOne({ where: { clave } });
+
+
+            if(refaccionExistente && refaccionExistente.id_refaccion !== id_refaccion) {
+              return res.json({
+                OK: true,
+                result: refaccionExistente
+            });
+            }
+
+            const refaccionActualizada = await Refacciones.update(
+                { clave, refaccion, stock_alm_central, stock_alm_salinas, stock_alm_salamanca },
+                { where: { id_refaccion } }
+            );
+            return res.json({
+                OK: true,
+                result: refaccionActualizada
+            });
+        } catch (error) {
+            console.error('Error al actualizar la refacción:', error);
+            return res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
 

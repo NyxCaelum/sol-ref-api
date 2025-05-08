@@ -15,6 +15,21 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(150),
             allowNull: false,
         },
+        stock_alm_central: {
+            type: DataType.INTEGER,
+            allowNull: true,
+            default: 1,
+        },
+        stock_alm_salinas: {
+            type: DataType.INTEGER,
+            allowNull: true,
+            default: 1,
+        },
+        stock_alm_salamanca: {
+            type: DataType.INTEGER,
+            allowNull: true,
+            default: 1,
+        },
         activo: {
             type: DataType.INTEGER,
             allowNull: true,

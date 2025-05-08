@@ -11,6 +11,8 @@ module.exports = app => {
 
     app.get('/solicitudes/TiemposEnProceso/:fechaInicio/:fechaFin', SolicitudesRefacciones.TiemposEnProceso);
 
+    app.get('/solicitudes/grafica/refacciones-pendientes', SolicitudesRefacciones.RefaccionesPendientesGrafica);
+
     app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);
 
     app.patch('/solicitudes/actualizarsolicitud', [verificarToken], SolicitudesRefacciones.ActualizarSolicitud);
