@@ -1,10 +1,40 @@
+const fs = require('fs');
+const path = require('path');
+
 const moment = require('moment');
+
 
 module.exports = app => {
 
     const comprasActualizacion = app.database.models.Compras_actualizacion;
     const CambioEstatusRefaccion = app.database.models.Cambio_estatus_refaccion;
     const refaccionSolicitada = app.database.models.Refaccion_solicitada;
+
+    function saveBase64FileDocumentosAdicionales(base64Data, id, numDoc) {
+    
+      const documentosPath = path.join(__dirname, '../../evidencias/adicionales');
+    
+      if (!fs.existsSync(documentosPath)) {
+        fs.mkdirSync(documentosPath, { recursive: true });
+      }
+    
+      const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        throw new Error('Formato base64 inválido');
+      }
+    
+      const DateFormated = moment().format('DD.MM.YYYY_hh.mm');
+    
+      const mimeType = matches[1];
+      const extension = mimeType.split('/')[1];
+    
+      const buffer = Buffer.from(matches[2], 'base64');
+      let filename = `${id}_${numDoc}_${DateFormated}.${extension}`;
+      
+      const filePath = path.join(documentosPath, filename);
+      fs.writeFileSync(filePath, buffer);
+      return filename;
+    }
 
     app.actualizacionCompras = async (req, res) => {
         const t = await app.database.sequelize.transaction();
@@ -121,30 +151,43 @@ module.exports = app => {
 
         const informacionOtorgada = req.body.informacion_adicional_otorgada;
         const id_refaccion_solicitada = req.body.id_refaccion_solicitada;
+        let documento_adicional_otorgado1 = req.body.documento_adicional_otorgado1;
+        let documento_adicional_otorgado2 = req.body.documento_adicional_otorgado2;
 
         try {
-            const solicitudActualizada = await refaccionSolicitada.update(
-                {
-                    informacion_adicional_otorgada: informacionOtorgada,
-                    estatus: 'en_proceso_compras'
-                },
-                {
-                    where:{
-                        id_refaccion_solicitada: id_refaccion_solicitada
-                    }
-                }
-            );
 
-            await CambioEstatusRefaccion.create({
-                id_refaccion_solicitada: id_refaccion_solicitada,
-                estatus: 'en_proceso_compras',
-                fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-            });
+          if(documento_adicional_otorgado1){
+            documento_adicional_otorgado1 = saveBase64FileDocumentosAdicionales(documento_adicional_otorgado1, id_refaccion_solicitada, 1);
+          }
 
-            return res.json({
-                OK: true,
-                result: solicitudActualizada
-            });
+          if(documento_adicional_otorgado2){
+            documento_adicional_otorgado2 = saveBase64FileDocumentosAdicionales(documento_adicional_otorgado2, id_refaccion_solicitada, 2);
+          }
+
+          const solicitudActualizada = await refaccionSolicitada.update(
+              {
+                  informacion_adicional_otorgada: informacionOtorgada,
+                  documento_adicional_otorgado1: documento_adicional_otorgado1,
+                  documento_adicional_otorgado2: documento_adicional_otorgado2,
+                  estatus: 'en_proceso_compras'
+              },
+              {
+                  where:{
+                      id_refaccion_solicitada: id_refaccion_solicitada
+                  }
+              }
+          );
+
+          await CambioEstatusRefaccion.create({
+              id_refaccion_solicitada: id_refaccion_solicitada,
+              estatus: 'en_proceso_compras',
+              fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+          });
+
+          return res.json({
+              OK: true,
+              result: solicitudActualizada
+          });
         } catch (error) {
             console.error('Error en solicitarInformacionAdicional:', error);
             return res.json(error);

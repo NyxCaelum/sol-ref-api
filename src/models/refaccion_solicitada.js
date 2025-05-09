@@ -43,6 +43,14 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(255),
             allowNull: true,
         },
+        documento_adicional_otorgado1: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
+        documento_adicional_otorgado2: {
+            type: DataType.STRING(255),
+            allowNull: true,
+        },
         evidencia_core: {
             type: DataType.STRING(255),
             allowNull: true,

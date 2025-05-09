@@ -1,4 +1,3 @@
-const id = require('faker/lib/locales/id_ID');
 const fs = require('fs');
 const moment = require('moment');
 const path = require('path');
@@ -315,138 +314,150 @@ module.exports = (app) => {
       const solicitudes = await app.database.sequelize.query(
         `
           WITH 
-            -- 1) Tu query base
-            base_data AS (
-              SELECT
-                CASE SOL.id_base 
-                  WHEN 1 THEN 'SALINAS' 
-                  WHEN 2 THEN 'SALAMANCA' 
-                END AS BASE,
-                REF_SOL.id_refaccion_solicitada,
-                SOL.unidad,
-                SOL.fecha_solicitud_completa AS fecha_solicitud,
-                REF_SOL.fecha_entrega         AS fecha_entrega,
-                CAM.estatus,
-                ROW_NUMBER() OVER (
-                  PARTITION BY REF_SOL.id_refaccion_solicitada 
-                  ORDER BY CAM.fecha_cambio DESC
-                ) AS rn_ult
-              FROM solicitud SOL
-              LEFT JOIN refaccion_solicitada REF_SOL 
-                ON SOL.id_solicitud = REF_SOL.id_solicitud
-              LEFT JOIN cambio_estatus_refaccion CAM 
-                ON REF_SOL.id_refaccion_solicitada = CAM.id_refaccion_solicitada
-            ),
+          -- 1) Tu query base
+          base_data AS (
+            SELECT
+              CASE SOL.id_base 
+                WHEN 1 THEN 'SALINAS' 
+                WHEN 2 THEN 'SALAMANCA' 
+              END AS BASE,
+              REF_SOL.id_refaccion_solicitada,
+              SOL.unidad,
+              SOL.fecha_solicitud_completa AS fecha_solicitud,
+              DATE(REF_SOL.fecha_entrega)   AS fecha_entrega, -- Convertimos a solo fecha
+              CAM.estatus,
+              ROW_NUMBER() OVER (
+              PARTITION BY REF_SOL.id_refaccion_solicitada 
+              ORDER BY CAM.fecha_cambio DESC
+              ) AS rn_ult
+            FROM 
+              solicitud SOL
+              LEFT JOIN refaccion_solicitada REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+              LEFT JOIN cambio_estatus_refaccion CAM ON REF_SOL.id_refaccion_solicitada = CAM.id_refaccion_solicitada
+          ),
 
-            -- 2) Último estatus y días de vida de cada refacción
-            reqs AS (
-              SELECT
-                BASE,
-                id_refaccion_solicitada,
-                unidad,
-                fecha_solicitud,
-                fecha_entrega,
-                MAX(CASE WHEN rn_ult = 1 THEN estatus END) AS estatus_final,
-                DATEDIFF(fecha_entrega, fecha_solicitud)    AS dias_entrega
-              FROM base_data
-              GROUP BY BASE, id_refaccion_solicitada, unidad, fecha_solicitud, fecha_entrega
-            ),
+          -- 2) Último estatus y días de vida de cada refacción
+          reqs AS (
+            SELECT
+              BASE,
+              id_refaccion_solicitada,
+              unidad,
+              fecha_solicitud,
+              fecha_entrega,
+              MAX(CASE WHEN rn_ult = 1 THEN estatus END) AS estatus_final,
+              DATEDIFF(fecha_entrega, fecha_solicitud)    AS dias_entrega
+            FROM 
+              base_data
+            GROUP BY 
+              BASE,
+                  id_refaccion_solicitada,
+                  unidad,
+                  fecha_solicitud,
+                  fecha_entrega
+          ),
 
-            -- 3) Generador de números 0–999
-            nums AS (
-              SELECT a.n + 10*b.n + 100*c.n AS offset_days
-              FROM 
-                (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
-                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a,
-                (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
-                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b,
-                (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
-                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) c
-            ),
+          -- 3) Generador de números 0–999
+          nums AS (
+            SELECT 
+              a.n + 10*b.n + 100*c.n AS offset_days
+            FROM 
+            (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
+            UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a,
+            (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
+            UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b,
+            (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 
+            UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) c
+          ),
 
-            -- 4) Calendario virtual desde la mínima solicitud hasta hoy
-            dates AS (
-              SELECT 
-                DATE_ADD(
-                  (SELECT MIN(fecha_solicitud) FROM reqs),
-                  INTERVAL offset_days DAY
-                ) AS fecha
-              FROM nums
-              WHERE DATE_ADD(
-                      (SELECT MIN(fecha_solicitud) FROM reqs),
-                      INTERVAL offset_days DAY
-                    ) <= CURDATE()
-            ),
+          -- 4) Calendario virtual desde la mínima solicitud hasta hoy
+          dates AS (
+            SELECT 
+              DATE_ADD(
+              (SELECT MIN(fecha_solicitud) FROM reqs),
+              INTERVAL offset_days DAY
+              ) AS fecha
+            FROM
+              nums
+            WHERE 
+              DATE_ADD(
+                (SELECT MIN(fecha_solicitud) FROM reqs),
+                INTERVAL offset_days DAY
+              ) <= CURDATE()
+          ),
 
-            -- 5) Refacciones pendientes por día
-            pending_by_day AS (
-              SELECT
-                r.BASE,
-                d.fecha,
-                COUNT(*) AS Refacciones_Pendientes
-              FROM reqs r
-              JOIN dates d
-                ON d.fecha BETWEEN r.fecha_solicitud 
-                              AND COALESCE(r.fecha_entrega - INTERVAL 1 DAY, CURDATE())
-              WHERE r.fecha_entrega IS NULL
-                AND r.estatus_final NOT IN (
-                  'solicitud_rechazada','por_solicitar','cancelada'
-                )
-              GROUP BY r.BASE, d.fecha
-            ),
+          -- 5) Refacciones pendientes por día
+          pending_by_day AS (
+            SELECT
+              r.BASE,
+              d.fecha,
+              COUNT(*) AS Refacciones_Pendientes
+            FROM 
+              reqs r
+            JOIN dates d ON d.fecha BETWEEN r.fecha_solicitud AND COALESCE(r.fecha_entrega - INTERVAL 1 DAY, CURDATE())
+            WHERE
+              r.fecha_entrega IS NULL AND r.estatus_final NOT IN ('solicitud_rechazada','por_solicitar','cancelada')
+            GROUP BY 
+              r.BASE,
+                  d.fecha
+          ),
 
-            -- 6) Métricas de entregas por fecha de entrega
-            delivered_metrics AS (
-              SELECT
-                BASE,
-                fecha_entrega AS fecha,
-                COUNT(*)                           AS total_entregas,
-                ROUND(AVG(dias_entrega),2)         AS promedioDiasEntrega,
-                SUM(dias_entrega <= 1)             AS Entrega_1_dia,
-                SUM(dias_entrega = 2)              AS Entrega_2_dias,
-                SUM(dias_entrega BETWEEN 3 AND 5)  AS Entrega_3_5_dias,
-                SUM(dias_entrega > 5)              AS Entrega_5_dias
-              FROM reqs
-              WHERE fecha_entrega IS NOT NULL
-              GROUP BY BASE, fecha_entrega
-            ),
+          -- 6) Métricas de entregas por fecha de entrega
+          delivered_metrics AS (
+            SELECT
+              BASE,
+              fecha_entrega AS fecha,
+              COUNT(*) AS total_entregas,
+              ROUND(AVG(dias_entrega),2) AS promedioDiasEntrega,
+              SUM(dias_entrega <= 1) AS Entrega_1_dia,
+              SUM(dias_entrega = 2) AS Entrega_2_dias,
+              SUM(dias_entrega BETWEEN 3 AND 5) AS Entrega_3_5_dias,
+              SUM(dias_entrega > 5) AS Entrega_5_dias
+            FROM 
+              reqs
+            WHERE 
+              fecha_entrega IS NOT NULL
+            GROUP BY 
+              BASE,
+                  fecha_entrega
+          ),
 
-            -- 7) Unidades activas (pendientes o pre-entrega) por día
-            units_by_day AS (
-              SELECT
-                r.BASE,
-                d.fecha,
-                COUNT(DISTINCT r.unidad) AS UnidadesConRefacciones
-              FROM reqs r
-              JOIN dates d
-                ON d.fecha BETWEEN r.fecha_solicitud 
-                              AND COALESCE(r.fecha_entrega - INTERVAL 1 DAY, CURDATE())
-              GROUP BY r.BASE, d.fecha
-            ),
+          -- 7) Unidades activas (pendientes o pre-entrega) por día
+          units_by_day AS (
+            SELECT
+              r.BASE,
+              d.fecha,
+              COUNT(DISTINCT r.unidad) AS UnidadesConRefacciones
+            FROM 
+              reqs r
+              JOIN dates d ON d.fecha BETWEEN r.fecha_solicitud AND COALESCE(r.fecha_entrega - INTERVAL 1 DAY, CURDATE())
+            GROUP BY 
+              r.BASE,
+              d.fecha
+          ),
 
-            -- 8) Unión final de todas las métricas
-            final AS (
-              SELECT
-                DATE_FORMAT(d.fecha, '%d/%m/%Y')        AS fecha,
-                COALESCE(p.Refacciones_Pendientes, 0)   AS Refacciones_Pendientes,
-                COALESCE(dm.Entrega_1_dia,      0)      AS Entrega_1_dia,
-                COALESCE(dm.Entrega_2_dias,     0)      AS Entrega_2_dias,
-                COALESCE(dm.Entrega_3_5_dias,   0)      AS Entrega_3_5_dias,
-                COALESCE(dm.Entrega_5_dias,     0)      AS Entrega_5_dias,
-                COALESCE(u.UnidadesConRefacciones, 0)    AS UnidadesConRefacciones,
-                COALESCE(dm.promedioDiasEntrega,  0)     AS promedioDiasEntrega
-              FROM dates d
-              LEFT JOIN pending_by_day    p  ON p.BASE  = 'SALINAS' AND p.fecha  = d.fecha
-              LEFT JOIN delivered_metrics dm ON dm.BASE = 'SALINAS' AND dm.fecha = d.fecha
-              LEFT JOIN units_by_day       u  ON u.BASE  = 'SALINAS' AND u.fecha  = d.fecha
-              -- Si quieres ambas bases, quita las condiciones de BASE o usa UNION
-              ORDER BY d.fecha
-            )
+          -- 8) Unión final de todas las métricas
+          final AS (
+            SELECT
+              p.BASE AS BASE,
+              DATE_FORMAT(d.fecha, '%d/%m/%Y') AS fecha,
+              COALESCE(p.Refacciones_Pendientes, 0) AS Refacciones_Pendientes,
+              COALESCE(dm.Entrega_1_dia,      0) AS Entrega_1_dia,
+              COALESCE(dm.Entrega_2_dias,     0) AS Entrega_2_dias,
+              COALESCE(dm.Entrega_3_5_dias,   0) AS Entrega_3_5_dias,
+              COALESCE(dm.Entrega_5_dias,     0) AS Entrega_5_dias,
+              COALESCE(u.UnidadesConRefacciones, 0) AS UnidadesConRefacciones,
+              COALESCE(dm.promedioDiasEntrega,  0) AS promedioDiasEntrega
+            FROM 
+              dates d
+              LEFT JOIN pending_by_day p ON p.fecha  = d.fecha
+              LEFT JOIN delivered_metrics dm ON dm.fecha = d.fecha AND dm.BASE = p.BASE
+              LEFT JOIN units_by_day u ON u.fecha = d.fecha AND u.BASE = p.BASE
+            ORDER BY 
+              d.fecha
+          )
 
-            SELECT * 
-            FROM final;
-
-
+          SELECT * 
+          FROM final;
         `,
         {
           type: sequelize.QueryTypes.SELECT,
@@ -1259,6 +1270,14 @@ module.exports = (app) => {
 
       const refaccionesIds = solicitud.refaccionesSolicitadas.map(refaccion => refaccion.id_refaccion_solicitada);
 
+      // await CambioEstatusRefaccion.destroy({
+      //     where: {
+      //     id_refaccion_solicitada: {
+      //     [Op.in]: refaccionesIds
+      //     }
+      //   }
+      // })
+      
       await refaccionSolicitada.destroy({
         where: {
           id_refaccion_solicitada: {

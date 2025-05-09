@@ -46,7 +46,9 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Documentos anexados, se restringe para no subir los de prueba
 evidencias/
+
 # TypeScript v1 declaration files
 typings/
 
