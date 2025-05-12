@@ -86,6 +86,10 @@ module.exports = (sequelize, DataType) => {
         causa_de_cancelar: {
             type: DataType.STRING(255),
             allowNull: true,
+        },
+        comentario_rechazo_refaccion: {
+            type: DataType.STRING(255),
+            allowNull: true,
         }
     }, {
         tableName: 'refaccion_solicitada',

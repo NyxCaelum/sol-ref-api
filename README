@@ -32,8 +32,3 @@ compra_rechazada           --Posible por quitar
 por_auto_compra            --por el momento sin uso
 por_auto_compra_ci         --por el momento sin uso
 
-
-pte_pedido_entre_companias
-pte_facturacion_entre_companias
-pte_autorizacion_compras_entre_companias
-pte_autorizacion_ci_entre_companias

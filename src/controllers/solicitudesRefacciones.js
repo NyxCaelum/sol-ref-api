@@ -845,7 +845,12 @@ module.exports = (app) => {
       // 2) Traer refacciones actuales
       // —————————————————————————————
       const actuales = await refaccionSolicitada.findAll({
-        where: { id_solicitud: solicitud.id_solicitud },
+        where: { 
+          id_solicitud: solicitud.id_solicitud,
+          estatus: {
+            [Op.in]: ['por_solicitar', 'solicitud_rechazada']
+          }
+        },
         transaction: t,
       });
       const actualesById = new Map(actuales.map(r => [r.id_refaccion_solicitada, r]));
@@ -1035,16 +1040,7 @@ module.exports = (app) => {
         });
       } else {
 
-        solicitud.estado = 5;
-
-        const solicitudActualizada = await Solicitud.update(
-          {
-            estado: solicitud.estado
-          },
-          {
-            where: {id_solicitud: solicitud.id_solicitud}
-          }
-        );
+        console.log('Peticion', req.body)
 
         const refaccionesActualizadas = await Promise.all(
           refacciones.map(async (refaccion) => {
@@ -1058,10 +1054,16 @@ module.exports = (app) => {
               refaccion.numero_pedido = 'stock'
             }
 
+            if(refaccion.refaccionRechazada){
+              refaccion.estatus = 'solicitud_rechazada';
+              refaccion.numero_pedido = null;
+            }
+
             await refaccionSolicitada.update(
               {
                 estatus: refaccion.estatus,
-                numero_pedido: refaccion.numero_pedido
+                numero_pedido: refaccion.numero_pedido,
+                comentario_rechazo_refaccion: refaccion.comentario_rechazo_refaccion ? refaccion.comentario_rechazo_refaccion : null,
               },
               { where: { id_refaccion_solicitada: refaccion.id_refaccion_solicitada } }
             );
@@ -1075,6 +1077,21 @@ module.exports = (app) => {
             return refaccion;
           })
         );
+
+        const refaccionesRechazadas = refacciones.filter(refaccion => refaccion.refaccionRechazada);
+
+        console.log('Refacciones rechazadas', refaccionesRechazadas)
+
+        const solicitudActualizada = await Solicitud.update(
+          {
+            estado: refaccionesRechazadas.length > 0 ? 4 : 5,
+          },
+          {
+            where: {id_solicitud: solicitud.id_solicitud}
+          }
+        );
+
+        console.log('response', {solicitudActualizada, refaccionesActualizadas})
 
         return res.json({
           OK: true,
@@ -1263,21 +1280,18 @@ module.exports = (app) => {
             model: refaccionSolicitada,
             attributes: ['id_refaccion_solicitada'],
             required: false,
-            as: 'refaccionesSolicitadas'
+            as: 'refaccionesSolicitadas',
+            where: {
+              estatus: {
+                [Op.in]: ['por_solicitar', 'solicitud_rechazada']
+              }
+            }
           },
         ]
       });
 
       const refaccionesIds = solicitud.refaccionesSolicitadas.map(refaccion => refaccion.id_refaccion_solicitada);
 
-      // await CambioEstatusRefaccion.destroy({
-      //     where: {
-      //     id_refaccion_solicitada: {
-      //     [Op.in]: refaccionesIds
-      //     }
-      //   }
-      // })
-      
       await refaccionSolicitada.destroy({
         where: {
           id_refaccion_solicitada: {
