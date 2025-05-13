@@ -1274,33 +1274,64 @@ module.exports = (app) => {
     try {
 
       const solicitud = await Solicitud.findByPk(id_solicitud, {
-        attributes: ['id_solicitud'],
+        attributes: ['id_solicitud', 'estado'],
         include: [
           {
             model: refaccionSolicitada,
-            attributes: ['id_refaccion_solicitada'],
+            attributes: ['id_refaccion_solicitada', 'estatus'],
             required: false,
             as: 'refaccionesSolicitadas',
-            where: {
-              estatus: {
-                [Op.in]: ['por_solicitar', 'solicitud_rechazada']
-              }
-            }
           },
         ]
       });
 
-      const refaccionesIds = solicitud.refaccionesSolicitadas.map(refaccion => refaccion.id_refaccion_solicitada);
+      if (!solicitud) {
+        return res.json({
+          OK: false,
+          error: 'Solicitud no encontrada'
+        });
+      }
 
-      await refaccionSolicitada.destroy({
-        where: {
-          id_refaccion_solicitada: {
-          [Op.in]: refaccionesIds
+      // Separar las refacciones por estatus
+      const refaccionesPorEliminar = solicitud.refaccionesSolicitadas.filter(refaccion =>
+        ['por_solicitar', 'solicitud_rechazada'].includes(refaccion.estatus)
+      );
+
+      const refaccionesNoPorEliminar = solicitud.refaccionesSolicitadas.filter(refaccion =>
+        !['por_solicitar', 'solicitud_rechazada'].includes(refaccion.estatus)
+      );
+
+      if (refaccionesPorEliminar.length > 0) {
+        const refaccionesIds = refaccionesPorEliminar.map(refaccion => refaccion.id_refaccion_solicitada);
+
+        await refaccionSolicitada.destroy({
+          where: {
+            id_refaccion_solicitada: {
+              [Op.in]: refaccionesIds
+            }
           }
-        }
-      });
+        });
+      }
 
-      // Eliminar la solicitud
+      if(solicitud.estado === 4 && refaccionesNoPorEliminar.length > 0){
+        await Solicitud.update(
+          {
+            estado: 5,
+          },
+          {
+            where: {id_solicitud: id_solicitud}
+          }
+        );
+      }
+
+      if (refaccionesNoPorEliminar.length > 0) {
+        return res.json({
+          OK: true,
+          msg: 'refacciones asociadas eliminadas correctamente'
+        });
+      }
+
+      // Eliminar la solicitud si no hay refacciones con otros estatus
       await Solicitud.destroy({
         where: {
           id_solicitud: solicitud.id_solicitud
