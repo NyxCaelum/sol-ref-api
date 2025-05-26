@@ -777,8 +777,9 @@ module.exports = (app) => {
   };
 
   app.ActualizarSolicitud = async (req, res) => {
+    let t;
     try {
-      const t = await app.database.sequelize.transaction();
+      t = await app.database.sequelize.transaction();
       // Extraemos refacciones y solicitud
       let refacciones = req.body.data.refacciones;
       delete req.body.data.refacciones;
@@ -993,7 +994,7 @@ module.exports = (app) => {
       await t.commit();
       return res.json({ OK: true });
     } catch (error) {
-      await t.rollback();
+      if (t) await t.rollback();
       console.error('Error en ActualizarSolicitud:', error);
       return res.status(500).json({ OK: false, error: error.message });
     }
@@ -1040,7 +1041,7 @@ module.exports = (app) => {
         });
       } else {
 
-        console.log('Peticion', req.body)
+        // console.log('Peticion', req.body)
 
         const refaccionesActualizadas = await Promise.all(
           refacciones.map(async (refaccion) => {
@@ -1080,7 +1081,7 @@ module.exports = (app) => {
 
         const refaccionesRechazadas = refacciones.filter(refaccion => refaccion.refaccionRechazada);
 
-        console.log('Refacciones rechazadas', refaccionesRechazadas)
+        // console.log('Refacciones rechazadas', refaccionesRechazadas)
 
         const solicitudActualizada = await Solicitud.update(
           {
@@ -1091,7 +1092,7 @@ module.exports = (app) => {
           }
         );
 
-        console.log('response', {solicitudActualizada, refaccionesActualizadas})
+        // console.log('response', {solicitudActualizada, refaccionesActualizadas})
 
         return res.json({
           OK: true,
@@ -1297,9 +1298,13 @@ module.exports = (app) => {
         ['por_solicitar', 'solicitud_rechazada'].includes(refaccion.estatus)
       );
 
+      // console.log('Por eliminar', refaccionesPorEliminar)
+
       const refaccionesNoPorEliminar = solicitud.refaccionesSolicitadas.filter(refaccion =>
         !['por_solicitar', 'solicitud_rechazada'].includes(refaccion.estatus)
       );
+
+      // console.log('No eliminar', refaccionesNoPorEliminar)
 
       if (refaccionesPorEliminar.length > 0) {
         const refaccionesIds = refaccionesPorEliminar.map(refaccion => refaccion.id_refaccion_solicitada);
@@ -1313,15 +1318,24 @@ module.exports = (app) => {
         });
       }
 
+      // console.log('estado', solicitud.estado)
+      // console.log('lenght', refaccionesNoPorEliminar.length)
       if(solicitud.estado === 4 && refaccionesNoPorEliminar.length > 0){
-        await Solicitud.update(
+
+        const [updatedRows] = await Solicitud.update(
           {
             estado: 5,
           },
           {
-            where: {id_solicitud: id_solicitud}
+            where: { id_solicitud: id_solicitud }
           }
         );
+
+        if (updatedRows === 0) {
+          console.log(`No se actualizó la solicitud con id ${id_solicitud} a estado 5`);
+        } else {
+          console.log(`Solicitud con id ${id_solicitud} actualizada a estado 5`);
+        }
       }
 
       if (refaccionesNoPorEliminar.length > 0) {
@@ -1346,7 +1360,7 @@ module.exports = (app) => {
       console.error('Error al eliminar la solicitud:', error);
       return res.json({
         OK: false,
-        error: 'Error al eliminar la solicitud'
+        error: error.message
       });
     }
 
@@ -1363,63 +1377,3 @@ const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
     }
   }
 }
-
-
-
-// const solicitudes = await app.database.sequelize.query(
-//   `SELECT 
-//     SOL.id_solicitud,
-//       SOL.id_base,
-//       SOL.fecha_inicio_solicitud,
-//       SOL.fecha_solicitud_completa,
-//       SOl.unidad,
-//       SOL.ot,
-//       SOL.carril,
-//       SOL.estado,
-//       SOL.numero_pedido,
-//       SOL.comentario_rechazo_solicitud,
-//       SOL.evidencia_advan,
-//       SOL.evidencia_vale_diagnostico,
-//       SOL.evidencia_vale_almacen,
-//       SOL.evidencia_autorizacion_jefatura,
-//       SOL.evidencia_autorizacion_gerencia,
-//       SOL.evidencia_autorizacion_CI,
-      
-//       BASE.base,
-      
-//       REF_SOL.id_refaccion_solicitada,
-//       REF_SOL.estatus,
-//       REF_SOL.cantidad,
-//       REF_SOL.core,
-//       REF_SOL.fecha_entrega,
-//       REF_SOL.evidencia_core,
-//       REF_SOL.evidencia_tarjeta_roja,
-//       REF_SOL.evidencia_ausencia_core,
-//       REF_SOL.evidencia_reporte_danos,
-      
-//       REF_CAT.id_refaccion,
-//       REF_CAT.clave,
-//       REF_CAT.refaccion,
-      
-//       COM_ACT.id_compras_actualizacion,
-//       COM_ACT.orden_compra,
-//       COM_ACT.fecha_actualizacion,
-//       COM_ACT.fecha_compromiso,
-//       COM_ACT.fecha_oc,
-//       COM_ACT.causas_retraso,
-//       COM_ACT.terminal,
-//       COM_ACT.proveedor,
-//       COM_ACT.observaciones
-//   FROM
-//     solicitud AS SOL
-//       LEFT JOIN base AS BASE ON BASE.id_base = SOL.id_base
-//       LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
-//       LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
-//       LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
-//   WHERE 
-//     SOL.id_base = ?`,
-//   {
-//     replacements: [base],
-//     type: QueryTypes.SELECT,
-//   },
-// );
