@@ -574,7 +574,7 @@ module.exports = (app) => {
         `
         SELECT
           SOL.id_solicitud AS 'FOLIO SOLICITUD',
-          REF_SOL.id_refaccion_solicitada AS 'FOLIO REFACCION'
+          REF_SOL.id_refaccion_solicitada AS 'FOLIO REFACCION',
           BAS.base AS 'BASE',
           SOL.unidad AS 'UNIDAD',
           SOL.carril AS 'CARRIL',
