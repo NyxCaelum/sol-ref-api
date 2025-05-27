@@ -573,6 +573,8 @@ module.exports = (app) => {
       const solicitudes = await app.database.sequelize.query(
         `
         SELECT
+          SOL.id_solicitud AS 'FOLIO SOLICITUD',
+          REF_SOL.id_refaccion_solicitada AS 'FOLIO REFACCION'
           BAS.base AS 'BASE',
           SOL.unidad AS 'UNIDAD',
           SOL.carril AS 'CARRIL',
@@ -614,12 +616,11 @@ module.exports = (app) => {
             LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
             LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
         WHERE
-          REF_SOL.estatus IS NOT NULL
+            REF_SOL.estatus IS NOT NULL
             AND REF_SOL.estatus <> 'cancelada'
             AND REF_SOL.estatus <> 'por_solicitar'
         ORDER BY
-          SOL.fecha_solicitud_completa DESC
-        LIMIT 150;
+          SOL.fecha_solicitud_completa DESC;
         `,
         {
           type: sequelize.QueryTypes.SELECT,
