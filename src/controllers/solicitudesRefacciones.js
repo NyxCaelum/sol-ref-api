@@ -116,26 +116,27 @@ module.exports = (app) => {
                   as: 'cambiosEstatus',
                   attributes: {
                     include: [
-                    [
-                      app.database.Sequelize.literal(`
-                        TIMEDIFF(
-                          fecha_cambio,
-                          COALESCE(
-                            LAG(fecha_cambio) OVER (
-                              PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
-                              ORDER BY fecha_cambio
-                            ),
-                            fecha_cambio
+                      [
+                        app.database.Sequelize.literal(`
+                          TIMEDIFF(
+                            fecha_cambio,
+                            COALESCE(
+                              LAG(fecha_cambio) OVER (
+                                PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
+                                ORDER BY fecha_cambio
+                              ),
+                              fecha_cambio
+                            )
                           )
-                        )
-                      `),
-                      'diferencia_horas_minutos'
+                        `),
+                        'diferencia_horas_minutos'
+                      ],
                     ],
-                  ]                  
+                  },
+                  order: [['id_cambio', 'ASC']]
                 }
-              }
-            ],
-            as: 'refaccionesSolicitadas'
+              ],
+              as: 'refaccionesSolicitadas'
             }
           ],
           order: [['fecha_inicio_solicitud', 'DESC']],
@@ -586,18 +587,19 @@ module.exports = (app) => {
             IFNULL(REF_SOL.fecha_entrega, CURDATE()),
             SOL.fecha_solicitud_completa
           ) AS 'DIAS DESDE SOLICITUD',
-          DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y') AS 'FECHA SOLICITUD',
+          DATE_FORMAT(SOL.fecha_solicitud_completa, '%d/%m/%Y %H:%i') AS 'FECHA SOLICITUD',
           CASE
             WHEN REF_SOL.core = 1 THEN 'CORE'
             WHEN REF_SOL.core = 0 THEN 'AUTORIZACION'
           END AS 'CORE/AUTO',
           REF_SOL.numero_pedido AS 'NUMERO PEDIDO',
           COM_ACT.proveedor AS 'PROVEEDOR',
-          DATE_FORMAT(COM_ACT.fecha_oc, '%d/%m/%Y') AS 'FECHA OC',
+          DATE_FORMAT(COM_ACT.fecha_oc, '%d/%m/%Y %H:%i') AS 'FECHA OC',
           COM_ACT.orden_compra AS 'ORDEN COMPRA',
           DATE_FORMAT(COM_ACT.fecha_compromiso, '%d/%m/%Y') AS 'FECHA COMPROMISO COMPRAS',
           DATE_FORMAT(REF_SOL.fecha_compromiso_envio_ac, '%d/%m/%Y') AS 'FECHA COMPROMISO AC',
           DATE_FORMAT(REF_SOL.fecha_entrega, '%d/%m/%Y') AS 'FECHA ENTREGA',
+
           CASE
             WHEN REF_SOL.estatus = 'pte_validar_sol_ac' THEN 'Por validar ac'
             WHEN REF_SOL.estatus = 'solicitud_rechazada' THEN 'Solicitud rechazada'
@@ -608,17 +610,49 @@ module.exports = (app) => {
             WHEN REF_SOL.estatus = 'por_recibir_ai' THEN 'Por recibir almacen interno'
             WHEN REF_SOL.estatus = 'recibida_ai' THEN 'Recibido en almacen interno'
             ELSE REF_SOL.estatus
-          END AS 'ESTATUS'
+          END AS 'ESTATUS',
+
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'pte_validar_sol_ac' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA PTE VALIDAR SOL AC',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'solicitud_rechazada' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA SOLICITUD RECHAZADA',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'en_proceso_compras' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA EN PROCESO COMPRAS',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'informacion_adicional_solicitada' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA INFO ADICIONAL SOLICITADA',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'pte_recepcion_ac' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA PTE RECEPCION AC',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'pte_enviar_ac' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA PTE ENVIAR AC',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'por_recibir_ai' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA POR RECIBIR AI',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'recibida_ai' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA RECIBIDA AI',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'devolucion' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA DEVOLUCION',
+          MAX(CASE WHEN CAM_EST_REF.estatus = 'cancelada' THEN DATE_FORMAT(CAM_EST_REF.fecha_cambio, '%d/%m/%Y %H:%i') END) AS 'FECHA CANCELADA'
         FROM
           solicitud AS SOL
-            LEFT JOIN base AS BAS ON SOL.id_base = BAS.id_base
-            LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
-            LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
-            LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
+        LEFT JOIN base AS BAS ON SOL.id_base = BAS.id_base
+        LEFT JOIN refaccion_solicitada AS REF_SOL ON SOL.id_solicitud = REF_SOL.id_solicitud
+        LEFT JOIN refacciones_catalogo AS REF_CAT ON REF_SOL.id_refaccion = REF_CAT.id_refaccion
+        LEFT JOIN compras_actualizacion AS COM_ACT ON REF_SOL.id_refaccion_solicitada = COM_ACT.id_refaccion_solicitada
+        LEFT JOIN cambio_estatus_refaccion AS CAM_EST_REF ON REF_SOL.id_refaccion_solicitada = CAM_EST_REF.id_refaccion_solicitada
         WHERE
-            REF_SOL.estatus IS NOT NULL
-            AND REF_SOL.estatus <> 'cancelada'
-            AND REF_SOL.estatus <> 'por_solicitar'
+        REF_SOL.estatus IS NOT NULL
+        AND REF_SOL.estatus <> 'cancelada'
+        AND REF_SOL.estatus <> 'por_solicitar'
+        GROUP BY
+          SOL.id_solicitud,
+          REF_SOL.id_refaccion_solicitada,
+          BAS.base,
+          SOL.unidad,
+          SOL.carril,
+          REF_SOL.cantidad,
+          REF_CAT.clave,
+          REF_CAT.refaccion,
+          SOL.OT,
+          SOL.fecha_solicitud_completa,
+          REF_SOL.core,
+          REF_SOL.numero_pedido,
+          COM_ACT.proveedor,
+          COM_ACT.fecha_oc,
+          COM_ACT.orden_compra,
+          COM_ACT.fecha_compromiso,
+          REF_SOL.fecha_compromiso_envio_ac,
+          REF_SOL.fecha_entrega,
+          REF_SOL.estatus
         ORDER BY
           SOL.fecha_solicitud_completa DESC;
         `,
@@ -689,6 +723,7 @@ module.exports = (app) => {
           claves.includes(solicitud.clave)
         );
 
+        
         // if(clavesCoincidentes.length > 0 && !solicitud.causa_solicitud_nuevamente){
         //   return res.json({
         //     OK: false,
