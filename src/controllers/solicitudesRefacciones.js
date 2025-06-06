@@ -1402,6 +1402,52 @@ module.exports = (app) => {
 
   }
 
+  app.pasarRefaccionValidarAC = async (req, res) => {
+    const { id_solicitud, id_refaccion_solicitada } = req.body;
+
+    let t
+
+    try {
+
+      t = await app.database.sequelize.transaction();
+
+      await refaccionSolicitada.update(
+        { estatus: 'pte_validar_sol_ac' },
+        {
+          where: { id_refaccion_solicitada },
+          transaction: t
+        }
+      );
+
+      await CambioEstatusRefaccion.create(
+        {
+          id_refaccion_solicitada: id_refaccion_solicitada,
+          estatus: 'pte_validar_sol_ac',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        },
+        { transaction: t }
+      );
+
+      await Solicitud.update(
+        { estado: 3 },
+        {
+          where: { id_solicitud },
+          transaction: t
+        }
+      );
+
+      await t.commit();
+      return res.json({
+        OK: true,
+        msg: 'Refacción pasada a validar AC correctamente'
+      });
+    } catch (error) {
+      if (t) await t.rollback();
+      console.error('Error al pasar refacción a validar AC:', error);
+      return res.json({ OK: false, error: error.message });
+    }
+  }
+
   return app;
 };
 
