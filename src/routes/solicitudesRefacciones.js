@@ -9,6 +9,8 @@ module.exports = app => {
     app.get('/solicitudes/TiemposEnProceso/:fechaInicio/:fechaFin', SolicitudesRefacciones.TiemposEnProceso);
     app.get('/solicitudes/grafica/refacciones-pendientes', SolicitudesRefacciones.RefaccionesPendientesGrafica);
 
+    app.get('/analitica/tiemposporprocesos/:base/:fecha_inicio/:fecha_fin', SolicitudesRefacciones.datasetTiemposPorProceso);
+
     app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);  
     app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion);
     app.post('/solicitudes/cancelar/:id_refaccion_solicitada', SolicitudesRefacciones.cancelarSolicitudDeRefaccion);
@@ -19,6 +21,5 @@ module.exports = app => {
     app.patch('/solicitudes/validaracnuevamente', SolicitudesRefacciones.pasarRefaccionValidarAC);
     
     app.delete('/solicitudes/eliminar/:id_solicitud', SolicitudesRefacciones.eliminarSolicitud);
-    
     // app.get('/numero_eco/obtener', SolicitudesRefacciones.ObtenerNumEconomico);
 }

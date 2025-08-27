@@ -63,6 +63,20 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING,
             allowNull: true,
         },
+        usr_sol: {
+            type: DataType.INTEGER,
+            allowNull: true,
+        },
+        creado_el: {
+            type: DataType.DATE,
+            allowNull: false,
+            defaultValue: DataType.NOW
+        },
+        actualizado_el: {
+            type: DataType.DATE,
+            allowNull: false,
+            defaultValue: DataType.NOW
+        },
     }, {
         tableName: 'solicitud',
         timestamps: false,
@@ -76,6 +90,9 @@ module.exports = (sequelize, DataType) => {
         Solicitud.belongsTo(models.Base, {
             foreignKey: 'id_base',
             as: 'base'
+        });
+        Solicitud.belongsTo(models.Usuarios, {
+            foreignKey: 'usr_sol',
         });
     };
 

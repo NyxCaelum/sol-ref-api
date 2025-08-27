@@ -67,11 +67,14 @@ function saveBase64FileEvidenciaEntrega(base64Data, data, type) {
 module.exports = (app) => {
 
   const Base = app.database.models.Base;
+  const Usuarios = app.database.models.Usuarios;
   const Solicitud = app.database.models.Solicitud;
   const refaccionSolicitada = app.database.models.Refaccion_solicitada;
   const comprasActualizacion = app.database.models.Compras_actualizacion;
   const refaccionesCatalogo = app.database.models.Refacciones;
   const CambioEstatusRefaccion = app.database.models.Cambio_estatus_refaccion;
+
+  const Sequelize = app.database.sequelize;
 
   app.SolicitudesPte = async (req, res) => {
       const base = req.params.base;
@@ -137,7 +140,12 @@ module.exports = (app) => {
                 }
               ],
               as: 'refaccionesSolicitadas'
-            }
+            },
+            { 
+              model: Usuarios,
+              attributes: ['id_usuario','nombre_empleado'],
+              required: false,
+            },
           ],
           order: [['fecha_inicio_solicitud', 'DESC']],
           limit: base === 3 ? 300 : 150
@@ -240,8 +248,8 @@ module.exports = (app) => {
         });
 
       } catch (error) {
-          console.error('Error en SolicitudesPte:', error);
-          return res.json(error);
+        console.error('Error en SolicitudesPte:', error);
+        return res.json(error);
       }
   };
 
@@ -304,8 +312,8 @@ module.exports = (app) => {
       return res.json(solicitudes);
 
     } catch (err) {
-      console.error('Error en SolicitudesPte:', error);
-      return res.json(error);
+      console.error('Error en Tiempos por proceso:', err);
+      return res.json(err);
     }
     
   }
@@ -631,8 +639,6 @@ module.exports = (app) => {
         LEFT JOIN cambio_estatus_refaccion AS CAM_EST_REF ON REF_SOL.id_refaccion_solicitada = CAM_EST_REF.id_refaccion_solicitada
         WHERE
         REF_SOL.estatus IS NOT NULL
-        AND REF_SOL.estatus <> 'cancelada'
-        AND REF_SOL.estatus <> 'por_solicitar'
         GROUP BY
           SOL.id_solicitud,
           REF_SOL.id_refaccion_solicitada,
@@ -816,7 +822,7 @@ module.exports = (app) => {
     let t;
     try {
       t = await app.database.sequelize.transaction();
-      // Extraemos refacciones y solicitud
+
       let refacciones = req.body.data.refacciones;
       delete req.body.data.refacciones;
       const solicitud = req.body.data;
@@ -1448,6 +1454,137 @@ module.exports = (app) => {
     }
   }
 
+  app.datasetTiemposPorProceso = async (req, res) => {
+
+    try {
+
+      const { base, fecha_inicio, fecha_fin } = req.params;
+      
+      const fecha_inicio_format = moment(new Date(fecha_inicio)).format('YYYY-MM-DD');
+      const fecha_fin_format = moment(new Date(fecha_fin)).format('YYYY-MM-DD');
+
+      // console.log(fecha_fin_format, fecha_inicio_format)
+
+      let optionBase;
+
+      if(Number(base) === 3){
+        optionBase = [1, 2]
+      } else {
+        optionBase = [base]
+      }
+
+      const cteBase = `
+        WITH cambios AS (
+          SELECT
+            S.id_base,
+            RS.id_refaccion_solicitada,
+            RS.fecha_entrega,
+            S.unidad,
+            RC.refaccion,
+            CSR.estatus,
+            CSR.fecha_cambio,
+            LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
+            LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
+          FROM refaccion_solicitada RS
+          LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion_solicitada
+          LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
+          LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
+        ),
+        tiempos AS (
+          SELECT
+            *,
+            ROUND(TIMESTAMPDIFF(MINUTE, fecha_cambio, fecha_anterior) / 60, 2) AS total_horas
+          FROM cambios
+        ),
+        base AS (
+          SELECT
+            id_base,
+            id_refaccion_solicitada,
+            unidad,
+            fecha_entrega,
+            refaccion,
+            IFNULL(SUM(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) AS por_solicitar,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) AS pte_validar_sol_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) AS solicitud_rechazada,
+            IFNULL(SUM(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) AS en_proceso_compras,
+            IFNULL(SUM(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) AS informacion_adicional_solicitada,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) AS pte_recepcion_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) AS pte_enviar_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) AS por_recibir_ai,
+            ROUND(
+              IFNULL(MAX(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0),
+            2) AS total_estatus_horas
+          FROM tiempos
+          WHERE
+            DATE(fecha_entrega) BETWEEN :fecha_inicio AND :fecha_fin
+            AND id_base IN (:optionBase)
+          GROUP BY
+            id_base,
+            id_refaccion_solicitada,
+            unidad,
+            fecha_entrega,
+            refaccion
+      )`;
+
+      const sqlTabla = `
+        ${cteBase}
+        SELECT *
+        FROM base
+      `;
+
+      const sqlPromedios = `
+        ${cteBase}
+        SELECT
+          ROUND(AVG(por_solicitar), 2)                        AS por_solicitar,
+          ROUND(AVG(pte_validar_sol_ac), 2)                  AS pte_validar_sol_ac,
+          ROUND(AVG(solicitud_rechazada), 2)                 AS solicitud_rechazada,
+          ROUND(AVG(en_proceso_compras), 2)                  AS en_proceso_compras,
+          ROUND(AVG(informacion_adicional_solicitada), 2)    AS informacion_adicional_solicitada,
+          ROUND(AVG(pte_recepcion_ac), 2)                    AS pte_recepcion_ac,
+          ROUND(AVG(pte_enviar_ac), 2)                       AS pte_enviar_ac,
+          ROUND(AVG(por_recibir_ai), 2)                      AS por_recibir_ai,
+          ROUND(AVG(total_estatus_horas), 2)                 AS total_estatus_horas
+        FROM base
+      `;
+
+      const replacements = {
+        fecha_inicio: fecha_inicio_format,
+        fecha_fin: fecha_fin_format,
+        optionBase
+      };
+
+      const [tabla, proms] = await Promise.all([
+        Sequelize.query(sqlTabla, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements
+        }),
+        Sequelize.query(sqlPromedios, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements
+        })
+      ]);
+
+      return res.status(200).json({
+        OK: true,
+        msg: 'Refacciones obtenidas correctamente',
+        tabla: tabla,
+        promedios: proms?.[0]
+      });
+
+    } catch (err) {
+      console.error('Error en dataset tiempos por proceso:', err);
+      return res.json(err);
+    }
+    
+  }
+
   return app;
 };
 
@@ -1459,3 +1596,71 @@ const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
     }
   }
 }
+
+
+// const solicitudes = await app.database.sequelize.query(
+//   `
+//     WITH cambios AS (
+//       SELECT
+//         S.id_base,
+//         RS.id_refaccion_solicitada,
+//         RS.fecha_entrega,
+//         S.unidad,
+//         RC.refaccion,
+//         CSR.estatus,
+//         CSR.fecha_cambio,
+//         LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
+//         LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
+//       FROM
+//         refaccion_solicitada RS
+//         LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion_solicitada
+//         LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
+//         LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
+//       ),
+//       tiempos AS (
+//       SELECT
+//           *,
+//           ROUND(TIMESTAMPDIFF(MINUTE, fecha_cambio, fecha_anterior) / 60, 2) AS total_horas
+//         FROM cambios
+//         )
+//         SELECT
+//         id_base,
+//         id_refaccion_solicitada,
+//         unidad,
+//         fecha_entrega,
+//         refaccion,
+//         IFNULL(SUM(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) AS por_solicitar,
+//         IFNULL(SUM(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) AS pte_validar_sol_ac,
+//         IFNULL(SUM(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) AS solicitud_rechazada,
+//         IFNULL(SUM(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) AS en_proceso_compras,
+//         IFNULL(SUM(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) AS informacion_adicional_solicitada,
+//         IFNULL(SUM(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) AS pte_recepcion_ac,
+//         IFNULL(SUM(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) AS pte_enviar_ac,
+//         IFNULL(SUM(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) AS por_recibir_ai,
+//         ROUND(
+//           IFNULL(MAX(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) +
+//           IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0),
+//         2) AS total_estatus_horas
+//       FROM
+//         tiempos
+//       WHERE
+//         DATE(fecha_entrega) BETWEEN :fecha_inicio AND :fecha_fin
+//         AND id_base IN (:optionBase)
+//       GROUP BY
+//         id_base,
+//         id_refaccion_solicitada,
+//         unidad,
+//         fecha_entrega,
+//         refaccion;
+//   `,
+//   {
+//     type: sequelize.QueryTypes.SELECT,
+//     replacements: { fecha_inicio: fecha_inicio_format, fecha_fin: fecha_fin_format, optionBase: optionBase }
+//   }
+// );
