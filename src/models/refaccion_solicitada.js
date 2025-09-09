@@ -35,6 +35,10 @@ module.exports = (sequelize, DataType) => {
             type: DataType.DATE,
             allowNull: true,
         },
+        fecha_salida_mtto: {
+            type: DataType.DATE,
+            allowNull: true,
+        },
         informacion_adicional_solicitada: {
             type: DataType.STRING(255),
             allowNull: true,

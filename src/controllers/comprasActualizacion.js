@@ -9,6 +9,7 @@ module.exports = app => {
     const comprasActualizacion = app.database.models.Compras_actualizacion;
     const CambioEstatusRefaccion = app.database.models.Cambio_estatus_refaccion;
     const refaccionSolicitada = app.database.models.Refaccion_solicitada;
+    const Solicitud = app.database.models.Solicitud;
 
     function saveBase64FileDocumentosAdicionales(base64Data, id, numDoc) {
     
@@ -117,18 +118,30 @@ module.exports = app => {
 
         const informacionSolicitada = req.body.informacion_adicional_solicitada;
         const id_refaccion_solicitada = req.body.id_refaccion_solicitada;
+        const id_solicitud = req.body.id_solicitud;
 
         try {
             const solicitudActualizada = await refaccionSolicitada.update(
-                {
-                    informacion_adicional_solicitada: informacionSolicitada,
-                    estatus: 'informacion_adicional_solicitada'
-                },
-                {
-                    where:{
-                        id_refaccion_solicitada: id_refaccion_solicitada
-                    }
+              {
+                  informacion_adicional_solicitada: informacionSolicitada,
+                  estatus: 'informacion_adicional_solicitada'
+              },
+              {
+                  where:{
+                      id_refaccion_solicitada: id_refaccion_solicitada
+                  }
+              }
+            );
+
+            await Solicitud.update(
+              {
+                estado: 0
+              },
+              {
+                where:{
+                    id_solicitud: id_solicitud
                 }
+              }
             );
 
             await CambioEstatusRefaccion.create({
@@ -151,6 +164,7 @@ module.exports = app => {
 
         const informacionOtorgada = req.body.informacion_adicional_otorgada;
         const id_refaccion_solicitada = req.body.id_refaccion_solicitada;
+        const id_solicitud = req.body.id_solicitud;
         let documento_adicional_otorgado1 = req.body.documento_adicional_otorgado1;
         let documento_adicional_otorgado2 = req.body.documento_adicional_otorgado2;
 
@@ -176,6 +190,17 @@ module.exports = app => {
                       id_refaccion_solicitada: id_refaccion_solicitada
                   }
               }
+          );
+
+          await Solicitud.update(
+            {
+              estado: 5
+            },
+            {
+              where:{
+                  id_solicitud: id_solicitud
+              }
+            }
           );
 
           await CambioEstatusRefaccion.create({

@@ -7,10 +7,7 @@ const { Op } = require('sequelize');
 // const sql = require('mssql')
 // const sqlConfig = require('../libs/configMSSQL');
 
-// Función para guardar archivos en base64
-
 function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
-  // Asegurarse de que la carpeta exista
   if (!fs.existsSync(folder)) {
     fs.mkdirSync(folder, { recursive: true });
   }
@@ -38,31 +35,31 @@ function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   return filename;
 }
 
-function saveBase64FileEvidenciaEntrega(base64Data, data, type) {
+// function saveBase64FileEvidenciaEntrega(base64Data, data, type) {
 
-  const evidenciaEntregadasPath = path.join(__dirname, '../../evidencias/entregadas');
+//   const evidenciaEntregadasPath = path.join(__dirname, '../../evidencias/entregadas');
 
-  if (!fs.existsSync(evidenciaEntregadasPath)) {
-    fs.mkdirSync(evidenciaEntregadasPath, { recursive: true });
-  }
+//   if (!fs.existsSync(evidenciaEntregadasPath)) {
+//     fs.mkdirSync(evidenciaEntregadasPath, { recursive: true });
+//   }
 
-  const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-  if (!matches || matches.length !== 3) {
-    throw new Error('Formato base64 inválido');
-  }
+//   const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+//   if (!matches || matches.length !== 3) {
+//     throw new Error('Formato base64 inválido');
+//   }
 
-  const DateFormated = moment().format('DD.MM.YYYY_hh.mm');
+//   const DateFormated = moment().format('DD.MM.YYYY_hh.mm');
 
-  const mimeType = matches[1];
-  const extension = mimeType.split('/')[1];
+//   const mimeType = matches[1];
+//   const extension = mimeType.split('/')[1];
 
-  const buffer = Buffer.from(matches[2], 'base64');
-  let filename = `${type}_${DateFormated}_${data.id_refaccion_solicitada}_${data.unidad}_${data.ot}.${extension}`;
+//   const buffer = Buffer.from(matches[2], 'base64');
+//   let filename = `${type}_${DateFormated}_${data.id_refaccion_solicitada}_${data.unidad}_${data.ot}.${extension}`;
   
-  const filePath = path.join(evidenciaEntregadasPath, filename);
-  fs.writeFileSync(filePath, buffer);
-  return filename;
-}
+//   const filePath = path.join(evidenciaEntregadasPath, filename);
+//   fs.writeFileSync(filePath, buffer);
+//   return filename;
+// }
 
 module.exports = (app) => {
 
@@ -76,182 +73,535 @@ module.exports = (app) => {
 
   const Sequelize = app.database.sequelize;
 
-  app.SolicitudesPte = async (req, res) => {
-      const base = req.params.base;
-      let opcionBase;
-      
-      try {
-        switch(base) {
-          case '3':
-              opcionBase = {};
-              break;
-          default:
-            opcionBase = {id_base: base};
-              break;
-        }
-        
-        const solicitudes = await Solicitud.findAll({
-          where: opcionBase,
+  const solicitudesActivas = async (base) => {
+    let opciones;
+
+    switch(base) {
+      case '3':
+          opciones = {};
+        break;
+      default:
+        opciones = {
+          id_base: base,
+        };
+        break;
+    }
+
+    // console.log(opciones);
+
+    const solicitudes = await Solicitud.findAll({
+      where: opciones,
+      include: [
+        { model: Base, as: 'base' },
+        {
+          model: refaccionSolicitada,
+          as: 'refaccionesSolicitadas',
+          required: true,
+          where: {
+            estatus: {
+              [Op.notIn]: ['devolucion', 'cancelada', 'recibida_ai', 'salida_mtto']
+            }
+          },
           include: [
-            { 
-              model: Base,
+            { model: refaccionesCatalogo, as: 'refaccion', required: false },
+            { model: comprasActualizacion, as: 'comprasActualizacion', required: false },
+            {
+              model: CambioEstatusRefaccion,
+              as: 'cambiosEstatus',
               required: false,
-              as: 'base'
-            },
-            { 
-              model: refaccionSolicitada,
-              attributes: { exclude: [] },
+              attributes: {
+                include: [[
+                  app.database.Sequelize.literal(`
+                    TIMEDIFF(
+                      fecha_cambio,
+                      COALESCE(
+                        LAG(fecha_cambio) OVER (
+                          PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada
+                          ORDER BY fecha_cambio
+                        ),
+                        fecha_cambio
+                      )
+                    )
+                  `),
+                  'diferencia_horas_minutos'
+                ]]
+              },
+              order: [['id_cambio', 'ASC']]
+            }
+          ]
+        },
+        { model: Usuarios, attributes: ['id_usuario','nombre_empleado'], required: false },
+      ],
+      order: [
+        [{ model: refaccionSolicitada, as: 'refaccionesSolicitadas' }, 'estatus', 'DESC']
+      ]
+    });
+
+    const parseSolicitudes = JSON.parse(JSON.stringify(solicitudes));
+    // console.log(parseSolicitudes);
+
+    const solicitudyRefacciones = parseSolicitudes.flatMap((solicitud) => {
+      return solicitud.refaccionesSolicitadas
+      .map(refa => {
+        const { refaccionesSolicitadas, ...solicitudSinRefacciones } = solicitud;
+        return {
+          solicitud: solicitudSinRefacciones,
+          refaccionSolicitada: refa,
+        };
+      });
+    });
+
+    return solicitudyRefacciones;
+  }
+
+  const solicitudesCompletas = async (base, numeroProceso) => {
+    let opciones;
+
+    switch(base) {
+
+      case '3':
+        if(numeroProceso === '0'){
+          opciones = {};
+        }
+
+        if(numeroProceso === '1'){
+          opciones = {
+            estado: {
+              [Op.in]: [0, 4]
+            }
+          };
+        }
+
+        if(numeroProceso === '2'){
+          opciones = {
+            estado: 3
+          };
+        }
+
+        break;
+
+      default:
+
+        if(numeroProceso === '0'){
+          opciones = {
+            id_base: base,
+          };
+        }
+
+        if(numeroProceso === '1'){
+          opciones = {
+            id_base: base,
+            estado: {
+              [Op.in]: [0, 4]
+            }
+          };
+        }
+
+        if(numeroProceso === '2'){
+          opciones = {
+            id_base: base,
+            estado: 3
+          };
+        }
+        break;
+    }
+
+    // console.log(opciones)
+    const solicitudes = await Solicitud.findAll({
+      where: opciones,
+      include: [
+        {
+          model: Base,
+          required: false,
+          as: 'base'
+        },
+        {
+          model: refaccionSolicitada,
+          attributes: { exclude: [] },
+          required: false,
+          include: [
+            {
+              model: refaccionesCatalogo,
               required: false,
-              include: [
-                { 
-                  model: refaccionesCatalogo,
-                  required: false,
-                  as: 'refaccion'
-                },
-                { 
-                  model: comprasActualizacion,
-                  required: false,
-                  as: 'comprasActualizacion'
-                },
-                {
-                  model: CambioEstatusRefaccion,
-                  required: false,
-                  as: 'cambiosEstatus',
-                  attributes: {
-                    include: [
-                      [
-                        app.database.Sequelize.literal(`
-                          TIMEDIFF(
-                            fecha_cambio,
-                            COALESCE(
-                              LAG(fecha_cambio) OVER (
-                                PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
-                                ORDER BY fecha_cambio
-                              ),
-                              fecha_cambio
-                            )
-                          )
-                        `),
-                        'diferencia_horas_minutos'
-                      ],
-                    ],
-                  },
-                  order: [['id_cambio', 'ASC']]
-                }
-              ],
-              as: 'refaccionesSolicitadas'
+              as: 'refaccion'
             },
-            { 
-              model: Usuarios,
-              attributes: ['id_usuario','nombre_empleado'],
+            {
+              model: comprasActualizacion,
               required: false,
+              as: 'comprasActualizacion'
             },
+            {
+              model: CambioEstatusRefaccion,
+              required: false,
+              as: 'cambiosEstatus',
+              attributes: {
+                include: [
+                  [
+                    app.database.Sequelize.literal(`
+                      TIMEDIFF(
+                        fecha_cambio,
+                        COALESCE(
+                          LAG(fecha_cambio) OVER (
+                            PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada 
+                            ORDER BY fecha_cambio
+                          ),
+                          fecha_cambio
+                        )
+                      )
+                    `),
+                    'diferencia_horas_minutos'
+                  ],
+                ],
+              },
+              order: [['id_cambio', 'ASC']]
+            }
           ],
-          order: [['fecha_inicio_solicitud', 'DESC']],
-          limit: base === 3 ? 300 : 150
+          as: 'refaccionesSolicitadas'
+        },
+        {
+          model: Usuarios,
+          attributes: ['id_usuario','nombre_empleado'],
+          required: false,
+        },
+      ],
+      order: [['fecha_inicio_solicitud', 'DESC']],
+    });
+
+    return solicitudes;
+  }
+
+  const solicitudesPorRefaccion = async (base, numeroProceso) => {
+    let opciones;
+    let estatus;
+
+    const limit = (numeroProceso === '6' || numeroProceso === '8') ? 200 : null;
+
+    switch(base) {
+      case '3':
+          opciones = {};
+        break;
+      default:
+        opciones = {
+          id_base: base,
+        };
+        break;
+    }
+
+    switch (numeroProceso) {
+      case '3':
+        estatus = ['en_proceso_compras']
+        break;
+      
+      case '4':
+        estatus = ['pte_recepcion_ac']
+        break;
+      
+      case '4.1':
+        estatus = ['pte_enviar_ac']
+        break;
+
+      case '5':
+        estatus = ['por_recibir_ai']
+        break;
+    
+      case '6':
+        estatus = ['pte_factura_interna', 'pte_entrada_ai']
+        break;
+      
+      case '7':
+        estatus = ['pte_salida_alm']
+        break;
+
+      case '8':
+        estatus = ['cancelada', 'salida_mtto']
+        break;
+
+      default:
+
+        break;
+    }
+
+    // console.log(opciones);
+
+    const solicitudes = await Solicitud.findAll({
+      where: opciones,
+      include: [
+        { model: Base, as: 'base' },
+        {
+          model: refaccionSolicitada,
+          as: 'refaccionesSolicitadas',
+          required: true,
+          where: { 
+            estatus: {
+              [Op.in]: estatus
+            }
+          },
+          include: [
+            { model: refaccionesCatalogo, as: 'refaccion', required: false },
+            { model: comprasActualizacion, as: 'comprasActualizacion', required: false },
+            {
+              model: CambioEstatusRefaccion,
+              as: 'cambiosEstatus',
+              required: false,
+              attributes: {
+                include: [[
+                  app.database.Sequelize.literal(`
+                    TIMEDIFF(
+                      fecha_cambio,
+                      COALESCE(
+                        LAG(fecha_cambio) OVER (
+                          PARTITION BY refaccionesSolicitadas.id_refaccion_solicitada
+                          ORDER BY fecha_cambio
+                        ),
+                        fecha_cambio
+                      )
+                    )
+                  `),
+                  'diferencia_horas_minutos'
+                ]]
+              },
+              order: [['id_cambio', 'ASC']]
+            }
+          ]
+        },
+        { model: Usuarios, attributes: ['id_usuario','nombre_empleado'], required: false },
+      ],
+      order: [['fecha_inicio_solicitud', 'DESC']],
+      limit: limit
+    });
+
+    // console.log(solicitudes.length)
+
+    const parseSolicitudes = JSON.parse(JSON.stringify(solicitudes));
+    // console.log(parseSolicitudes);
+
+    let solicitudyRefacciones;
+
+    if (numeroProceso === '8') {
+      const canceladas = [];
+      const salidaMtto = [];
+
+      parseSolicitudes.forEach((solicitud) => {
+        solicitud.refaccionesSolicitadas.forEach((refa) => {
+          const { refaccionesSolicitadas, ...solicitudSinRefacciones } = solicitud;
+          const refaccionData = {
+            solicitud: solicitudSinRefacciones,
+            refaccionSolicitada: refa,
+          };
+
+          if (refa.estatus === 'cancelada') {
+            canceladas.push(refaccionData);
+          } else if (refa.estatus === 'salida_mtto') {
+            salidaMtto.push(refaccionData);
+          }
         });
+      });
+
+      solicitudyRefacciones = { canceladas, salidaMtto };
+    } else {
+      solicitudyRefacciones = parseSolicitudes.flatMap((solicitud) => {
+        return solicitud.refaccionesSolicitadas.map((refa) => {
+          const { refaccionesSolicitadas, ...solicitudSinRefacciones } = solicitud;
+          return {
+            solicitud: solicitudSinRefacciones,
+            refaccionSolicitada: refa,
+          };
+        });
+      });
+    }
+
+    return solicitudyRefacciones;
+  }
+
+  app.SolicitudesPte = async (req, res) => {
+    
+    // console.log( typeof base)
+    // console.log(typeof numeroProceso)
+    
+    try {
+      
+      const base = req.params.base;
+      const numeroProceso = req.params.proceso;
+
+      switch(numeroProceso) {
+        case '0':
+          const solicitudes = await solicitudesActivas(base);
+
+          return res.json({ 
+            OK: true, 
+            result: solicitudes,
+          });
+
+        case '1':
+          const PorSolicitar = await solicitudesCompletas(base, numeroProceso);
+
+          return res.json({ 
+            OK: true, 
+            result: PorSolicitar,
+          });
+
+        case '2':
+          const PorValidar = await solicitudesCompletas(base, numeroProceso);
+
+          return res.json({ 
+            OK: true, 
+            result: PorValidar,
+          });
         
-        const refaccionesPorEstatusCriticas = await refaccionSolicitada.findAll({
-          attributes: [
+        default:
+          const refacciones = await solicitudesPorRefaccion(base, numeroProceso);
+          // console.log(refacciones)
+          return res.json({ 
+            OK: true, 
+            result: refacciones,
+          });
+      }
+
+      // return res.json({ 
+      //   OK: false,
+      //   msg: 'Opcion no valida',
+      //   result: null,
+      // });
+
+    } catch (error) {
+      console.error('Error en SolicitudesPte:', error);
+      return res.json(error);
+    }
+  };
+
+  app.conteoRefaccionesPorProceso = async (req, res) => {
+
+    let t;
+    try {
+      const base = req.params.id_base;
+      // console.log(req.params);
+      let opciones;
+  
+  
+      switch(base) {
+        case '3':
+            opciones = {};
+          break;
+        default:
+          opciones = {
+            id_base: base,
+          };
+          break;
+      }
+
+      t = await Sequelize.transaction();
+
+      const refaccionesPorEstatusCriticas = await refaccionSolicitada.findAll({
+        where: opciones,
+        attributes: [
+        'estatus',
+        [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
+        ],
+        include: [
+        {
+          model: Solicitud,
+          attributes: [],
+          required: true,
+          as: 'solicitud',
+          where: {
+            ...opciones,
+            [Op.and]: [
+              { carril: { [Op.ne]: null } },
+              { carril: { [Op.ne]: '' } },
+              { carril: { [Op.ne]: 'CUARENTENA' } }
+            ]
+          }
+        }
+        ],
+        group: ['estatus'],
+        where: {
+        [Op.or]: [
+          { estatus: null },
+          { estatus: { [Op.in]: [
+            'por_solicitar',
+            'pte_validar_sol_ac',
+            'solicitud_rechazada',
+            'en_proceso_compras',
+            'pte_recepcion_ac',
+            'pte_enviar_ac',
+            'informacion_adicional_solicitada',
+            'por_recibir_ai',
+            'pte_factura_interna',
+            'pte_entrada_ai',
+            'pte_salida_alm',
+            'salida_mtto',
+          ] } }
+        ]
+        },
+        transaction: t,
+      });
+
+      const refaccionesPorEstatusTodas = await refaccionSolicitada.findAll({
+        attributes: [
           'estatus',
           [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
-          ],
-          include: [
+        ],
+        include: [
           {
             model: Solicitud,
             attributes: [],
             required: true,
             as: 'solicitud',
-              where: {
-              ...opcionBase,
-              [Op.and]: [
-                { carril: { [Op.ne]: null } },
-                { carril: { [Op.ne]: '' } },
-                { carril: { [Op.ne]: 'CUARENTENA' } }
-              ]
-            }
+            where: opciones
           }
-          ],
-          group: ['estatus'],
-          where: {
+        ],
+        group: ['estatus'],
+        where: {
           [Op.or]: [
-            { estatus: null },
-            { estatus: { [Op.in]: [
-              'por_solicitar',
-              'pte_validar_sol_ac',
-              'solicitud_rechazada',
-              'en_proceso_compras',
-              'pte_recepcion_ac',
-              'pte_enviar_ac',
-              'informacion_adicional_solicitada',
-              'por_recibir_ai',
-              'devolucion',
-              'recibida_ai',
-              'cancelada',
-            ] } }
+          { estatus: null },
+          { estatus: { [Op.in]: [
+            'por_solicitar',
+            'pte_validar_sol_ac',
+            'solicitud_rechazada',
+            'en_proceso_compras',
+            'pte_recepcion_ac',
+            'pte_enviar_ac',
+            'informacion_adicional_solicitada',
+            'por_recibir_ai',
+            'pte_factura_interna',
+            'pte_entrada_ai',
+            'pte_salida_alm',
+            'salida_mtto',
+          ] } }
           ]
-          },
-          limit: base === 3 ? 300 : 150
+        },
+        transaction: t,
+      });
+
+      const conteoPorEstatusCriticas = refaccionesPorEstatusCriticas.reduce((acc, item) => {
+        acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+        return acc;
+      }, {});
+
+      const conteoPorEstatus = refaccionesPorEstatusTodas.reduce((acc, item) => {
+        acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
+        return acc;
+      }, {});
+
+      await t.commit();
+      return res.status(200).json({
+          OK: true,
+          msg: 'Resumen obtenido correctamente',
+          result: {
+            conteoPorEstatus: conteoPorEstatus, 
+            conteoPorEstatusCriticas: conteoPorEstatusCriticas,
+          }
+      });
+
+    } catch (error) {
+        if (t) await t.rollback();
+        console.error('Error al obtener resumen de refacciones:', error);
+        return res.status(500).json({ 
+            OK: false,
+            msg: error,
         });
-
-        const refaccionesPorEstatusTodas = await refaccionSolicitada.findAll({
-          attributes: [
-            'estatus',
-            [sequelize.fn('COUNT', sequelize.col('estatus')), 'cantidad']
-          ],
-          include: [
-            {
-              model: Solicitud,
-              attributes: [],
-              required: true,
-              as: 'solicitud',
-              where: opcionBase
-            }
-          ],
-          group: ['estatus'],
-          where: {
-            [Op.or]: [
-            { estatus: null },
-            { estatus: { [Op.in]: [
-              'por_solicitar',
-              'pte_validar_sol_ac',
-              'solicitud_rechazada',
-              'en_proceso_compras',
-              'pte_recepcion_ac',
-              'pte_enviar_ac',
-              'informacion_adicional_solicitada',
-              'por_recibir_ai',
-              'devolucion',
-              'recibida_ai',
-              'cancelada',
-            ] } }
-            ]
-          },
-          limit: base === 3 ? 300 : 150
-        });
-
-        const conteoPorEstatusCriticas = refaccionesPorEstatusCriticas.reduce((acc, item) => {
-          acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
-          return acc;
-        }, {});
-
-        const conteoPorEstatus = refaccionesPorEstatusTodas.reduce((acc, item) => {
-          acc[item.estatus || 'null'] = parseInt(item.dataValues.cantidad, 10);
-          return acc;
-        }, {});
-
-        return res.json({ 
-          OK: true, 
-          result: solicitudes, 
-          conteoPorEstatus, 
-          conteoPorEstatusCriticas,
-        });
-
-      } catch (error) {
-        console.error('Error en SolicitudesPte:', error);
-        return res.json(error);
-      }
-  };
+    }
+  }
 
   app.TiemposEnProceso = async (req, res) => {
 
@@ -480,39 +830,6 @@ module.exports = (app) => {
       return res.json(error);
     }
   }
-
-  // app.ObtenerNumEconomico = async (req, res) => {
-
-  //   try {
-
-  //     await sql.connect(sqlConfig)
-  //     const result = await sql.query`
-  //       SELECT
-  //           TRACTO_NUM_ECO AS 'NUM ECO'
-  //       FROM 
-  //           TRACTO
-  //       WHERE 
-  //           TRACTO_NUM_ECO LIKE 'TLEA-%' OR TRACTO_NUM_ECO LIKE 'C%'
-  //       UNION ALL
-  //       SELECT 
-  //           REMOLQUE_NUM_ECO
-  //       FROM
-  //           REMOLQUE
-  //       WHERE 
-  //           REMOLQUE_NUM_ECO LIKE 'RE-%' OR REMOLQUE_NUM_ECO LIKE 'DL-%'`
-
-  //     const response = result.recordsets[0].map(row => row['NUM ECO'].trim());
-
-  //     return res.status(200).json({
-  //       OK: true,
-  //       result: response
-  //     })
-     
-  //   } catch (error) {
-  //       console.error('Error en ObtenerNumEconomico:', error);
-  //       return res.json(error);
-  //   }
-  // }
 
   app.ReporteRefaccionesPendientes = async (req, res) => {
 
@@ -972,6 +1289,7 @@ module.exports = (app) => {
           cantidad: r.cantidad,
           core: r.core,
           estatus: r.estatus,
+          id_refaccion: r.id_refaccion,
           evidencia_core: r.evidencia_core,
           evidencia_tarjeta_roja: r.evidencia_tarjeta_roja,
           evidencia_ausencia_core: r.evidencia_ausencia_core,
@@ -1212,30 +1530,16 @@ module.exports = (app) => {
   }
 
   app.confirmarRecepcion = async (req, res) => {
-    // console.log(req.body);
     const data = req.body;
-
-    let evidencia_refaccion_entregado;
-    let evidencia_numeroParte_entregado;
 
     try {
 
       if(data.confirmarRecepcion){
 
-        if(data.evidencia_refaccion_entregado){
-          evidencia_refaccion_entregado = saveBase64FileEvidenciaEntrega(data.evidencia_refaccion_entregado, data, 'evidencia_refaccion_entregado');
-        }
-  
-        if(data.evidencia_numeroParte_entregado){
-          evidencia_numeroParte_entregado = saveBase64FileEvidenciaEntrega(data.evidencia_numeroParte_entregado, data, 'evidencia_numeroParte_entregado');
-        }
-
         await refaccionSolicitada.update(
           {
-            estatus: 'recibida_ai',
-            fecha_entrega: moment(),
-            evidencia_refaccion_entregado: evidencia_refaccion_entregado,
-            evidencia_numeroParte_entregado: evidencia_numeroParte_entregado
+            estatus: 'pte_factura_interna',
+            fecha_entrega: moment().format('YYYY-MM-DD HH:mm:ss'),
           },
           {
            where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
@@ -1244,29 +1548,29 @@ module.exports = (app) => {
 
         await CambioEstatusRefaccion.create({
           id_refaccion_solicitada: data.id_refaccion_solicitada,
-          estatus: 'recibida_ai',
+          estatus: 'pte_factura_interna',
           fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
         });
       }
 
-      if(data.devolucion){
-        await refaccionSolicitada.update(
-          {
-            estatus: 'devolucion',
-            fecha_entrega: moment(),
-            causa_de_devolucion: data.causa_de_devolucion,
-          },
-          {
-           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
-          }
-        );
+      // if(data.devolucion){
+      //   await refaccionSolicitada.update(
+      //     {
+      //       estatus: 'devolucion',
+      //       fecha_entrega: moment(),
+      //       causa_de_devolucion: data.causa_de_devolucion,
+      //     },
+      //     {
+      //      where: { id_refaccion_solicitada: data.id_refaccion_solicitada }
+      //     }
+      //   );
 
-        await CambioEstatusRefaccion.create({
-          id_refaccion_solicitada: data.id_refaccion_solicitada,
-          estatus: 'devolucion',
-          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-        });
-      }
+      //   await CambioEstatusRefaccion.create({
+      //     id_refaccion_solicitada: data.id_refaccion_solicitada,
+      //     estatus: 'devolucion',
+      //     fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+      //   });
+      // }
         
       return res.json({
           OK: true,
@@ -1409,16 +1713,17 @@ module.exports = (app) => {
   }
 
   app.pasarRefaccionValidarAC = async (req, res) => {
-    const { id_solicitud, id_refaccion_solicitada } = req.body;
+    const { id_solicitud, id_refaccion_solicitada, estatus } = req.body;
 
     let t
 
     try {
 
       t = await app.database.sequelize.transaction();
+      // console.log(id_solicitud, id_refaccion_solicitada, estatus)
 
       await refaccionSolicitada.update(
-        { estatus: 'pte_validar_sol_ac' },
+        { estatus: estatus },
         {
           where: { id_refaccion_solicitada },
           transaction: t
@@ -1428,14 +1733,26 @@ module.exports = (app) => {
       await CambioEstatusRefaccion.create(
         {
           id_refaccion_solicitada: id_refaccion_solicitada,
-          estatus: 'pte_validar_sol_ac',
+          estatus: estatus,
           fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
         },
         { transaction: t }
       );
 
+      let estado;
+
+      switch (estatus) {
+        case 'pte_validar_sol_ac':
+          estado = 3
+          break;
+      
+        default:
+          estado = 5
+          break;
+      }
+
       await Solicitud.update(
-        { estado: 3 },
+        { estado: estado },
         {
           where: { id_solicitud },
           transaction: t
@@ -1443,13 +1760,16 @@ module.exports = (app) => {
       );
 
       await t.commit();
+
+      app.emit('recarga');
+      // IO.emit('recarga');
       return res.json({
         OK: true,
-        msg: 'Refacción pasada a validar AC correctamente'
+        msg: 'Estatus de refaccion cambiado correctamente'
       });
     } catch (error) {
-      if (t) await t.rollback();
       console.error('Error al pasar refacción a validar AC:', error);
+      if (t) await t.rollback();
       return res.json({ OK: false, error: error.message });
     }
   }
@@ -1486,7 +1806,7 @@ module.exports = (app) => {
             LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
             LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
           FROM refaccion_solicitada RS
-          LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion_solicitada
+          LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion
           LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
           LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
         ),
@@ -1511,6 +1831,9 @@ module.exports = (app) => {
             IFNULL(SUM(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) AS pte_recepcion_ac,
             IFNULL(SUM(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) AS pte_enviar_ac,
             IFNULL(SUM(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) AS por_recibir_ai,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_factura_interna' THEN total_horas END), 0) AS pte_factura_interna,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_entrada_ai' THEN total_horas END), 0) AS pte_entrada_ai,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_salida_alm' THEN total_horas END), 0) AS pte_salida_alm,
             ROUND(
               IFNULL(MAX(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) +
               IFNULL(MAX(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) +
@@ -1519,7 +1842,10 @@ module.exports = (app) => {
               IFNULL(MAX(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) +
               IFNULL(MAX(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) +
               IFNULL(MAX(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) +
-              IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0),
+              IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_factura_interna' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_entrada_ai' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_salida_alm' THEN total_horas END), 0),
             2) AS total_estatus_horas
           FROM tiempos
           WHERE
@@ -1550,6 +1876,9 @@ module.exports = (app) => {
           ROUND(AVG(pte_recepcion_ac), 2)                    AS pte_recepcion_ac,
           ROUND(AVG(pte_enviar_ac), 2)                       AS pte_enviar_ac,
           ROUND(AVG(por_recibir_ai), 2)                      AS por_recibir_ai,
+          ROUND(AVG(pte_factura_interna), 2)                 AS pte_factura_interna,
+          ROUND(AVG(pte_entrada_ai), 2)                      AS pte_entrada_ai,
+          ROUND(AVG(pte_salida_alm), 2)                      AS pte_salida_alm,
           ROUND(AVG(total_estatus_horas), 2)                 AS total_estatus_horas
         FROM base
       `;
@@ -1585,6 +1914,151 @@ module.exports = (app) => {
     
   }
 
+  app.confirmarRecepcionAI = async (req, res) => {
+    let t;
+
+    try {
+      const { ids_refacciones } = req.body;
+      t = await Sequelize.transaction();
+      let cambios = [];
+
+      await refaccionSolicitada.update(
+        {
+          estatus: 'pte_factura_interna',
+          fecha_entrega: moment().format('YYYY-MM-DD HH:mm:ss')
+        },
+        {
+          where: { id_refaccion_solicitada: { [Op.in]: ids_refacciones } },
+          transaction: t,
+        }
+      )
+
+      const fecha_actual = moment().format('YYYY-MM-DD HH:mm:ss');
+
+      ids_refacciones.forEach(id => {
+        const cambio = {
+          id_refaccion_solicitada: id,
+          estatus: 'pte_factura_interna',
+          fecha_cambio: fecha_actual,
+        }
+
+        cambios.push(cambio);
+      });
+
+      await CambioEstatusRefaccion.bulkCreate(cambios, { transaction: t });
+
+      await t.commit();
+      return res.status(200).json({
+        OK: true,
+        msg: 'Recepcion confirmada correctamente',
+        result: null
+      });
+
+    } catch (error) {
+      console.error('Error al confirmar varias recepciones AI:', error);
+      if (t) await t.rollback();
+        return res.status(500).json({
+            OK: false,
+            msg: error,
+        });
+    }
+  }
+
+  app.confirmarFacturaEntradaAI = async (req, res) => {
+    let t;
+
+    try {
+      const { ids_entradas } = req.body;
+      t = await Sequelize.transaction();
+
+      let cambios = [];
+
+      await refaccionSolicitada.update(
+        { estatus: 'pte_salida_alm' },
+        {
+          where: { id_refaccion_solicitada: { [Op.in]: ids_entradas } },
+          transaction: t,
+        }
+      )
+
+      ids_entradas.forEach(id => {
+        const cambio = {
+          id_refaccion_solicitada: id,
+          estatus: 'pte_salida_alm',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        }
+
+        cambios.push(cambio);
+      });
+
+      await CambioEstatusRefaccion.bulkCreate(cambios, { transaction: t });
+      
+      await t.commit();
+      return res.status(200).json({
+        OK: true,
+        msg: 'Entradas confirmadas correctamente',
+        result: null
+      });
+
+    } catch (error) {
+      console.error('Error al confirmar varias recepciones AI:', error);
+      if (t) await t.rollback();
+        return res.status(500).json({
+            OK: false,
+            msg: error,
+        });
+    }
+  }
+
+  app.confirmarSalidaMtto = async (req, res) => { 
+    let t;
+
+    try {
+      const { ids_salida } = req.body;
+      t = await Sequelize.transaction();
+
+      let cambios = [];
+
+      await refaccionSolicitada.update(
+        {
+          estatus: 'salida_mtto',
+          fecha_salida_mtto: moment().format('YYYY-MM-DD HH:mm:ss')
+        },
+        {
+          where: { id_refaccion_solicitada: { [Op.in]: ids_salida } },
+          transaction: t,
+        }
+      )
+
+      ids_salida.forEach(id => {
+        const cambio = {
+          id_refaccion_solicitada: id,
+          estatus: 'salida_mtto',
+          fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
+        }
+
+        cambios.push(cambio);
+      });
+
+      await CambioEstatusRefaccion.bulkCreate(cambios, { transaction: t });
+      
+      await t.commit();
+      return res.status(200).json({
+        OK: true,
+        msg: 'Salidas confirmadas correctamente',
+        result: null
+      });
+
+    } catch (error) {
+      console.error('Error al confirmar varias salidas mantenimiento:', error);
+      if (t) await t.rollback();
+        return res.status(500).json({
+            OK: false,
+            msg: error,
+        });
+    }
+  }
+
   return app;
 };
 
@@ -1597,70 +2071,26 @@ const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
   }
 }
 
+// app.crearFamilia = async (req, res) => {
 
-// const solicitudes = await app.database.sequelize.query(
-//   `
-//     WITH cambios AS (
-//       SELECT
-//         S.id_base,
-//         RS.id_refaccion_solicitada,
-//         RS.fecha_entrega,
-//         S.unidad,
-//         RC.refaccion,
-//         CSR.estatus,
-//         CSR.fecha_cambio,
-//         LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
-//         LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
-//       FROM
-//         refaccion_solicitada RS
-//         LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion_solicitada
-//         LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
-//         LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
-//       ),
-//       tiempos AS (
-//       SELECT
-//           *,
-//           ROUND(TIMESTAMPDIFF(MINUTE, fecha_cambio, fecha_anterior) / 60, 2) AS total_horas
-//         FROM cambios
-//         )
-//         SELECT
-//         id_base,
-//         id_refaccion_solicitada,
-//         unidad,
-//         fecha_entrega,
-//         refaccion,
-//         IFNULL(SUM(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) AS por_solicitar,
-//         IFNULL(SUM(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) AS pte_validar_sol_ac,
-//         IFNULL(SUM(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) AS solicitud_rechazada,
-//         IFNULL(SUM(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) AS en_proceso_compras,
-//         IFNULL(SUM(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) AS informacion_adicional_solicitada,
-//         IFNULL(SUM(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) AS pte_recepcion_ac,
-//         IFNULL(SUM(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) AS pte_enviar_ac,
-//         IFNULL(SUM(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) AS por_recibir_ai,
-//         ROUND(
-//           IFNULL(MAX(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) +
-//           IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0),
-//         2) AS total_estatus_horas
-//       FROM
-//         tiempos
-//       WHERE
-//         DATE(fecha_entrega) BETWEEN :fecha_inicio AND :fecha_fin
-//         AND id_base IN (:optionBase)
-//       GROUP BY
-//         id_base,
-//         id_refaccion_solicitada,
-//         unidad,
-//         fecha_entrega,
-//         refaccion;
-//   `,
-//   {
-//     type: sequelize.QueryTypes.SELECT,
-//     replacements: { fecha_inicio: fecha_inicio_format, fecha_fin: fecha_fin_format, optionBase: optionBase }
-//   }
-// );
+//     // let t;
+
+//     try {
+//         // t = await Sequelize.transaction();
+
+//         // await t.commit();
+//         return res.status(200).json({
+//             OK: true,
+//             msg: '',
+//             result: null
+//         });
+
+//     } catch (error) {
+//         // if (t) await t.rollback();
+//         console.error('Error al :', error);
+//         return res.status(500).json({ 
+//             OK: false,
+//             msg: error,
+//         });
+//     }
+// }

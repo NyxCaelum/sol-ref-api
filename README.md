@@ -19,16 +19,11 @@ pte_recepcion_ac
 pte_enviar_ac
 por_recibir_ai
 
-devolucion
-recibida_ai
+pte_factura_interna  //Una vez recibido, verificar si esta pendiente pero de primera instancia va estar en este
+pte_entrada_ai       //Tiene facturacion pero no entrada
 
+pte_salida_alm           //Ya tiene facturacion y entrada, esta pendiente salida
 
+salida_mtto          //Ya le dieron salida
 
-
-
-por_autorizar_mtto         --Posible por quitar
-por_autorizar_solicitud_CI --Posible por quitar
-compra_rechazada           --Posible por quitar
-por_auto_compra            --por el momento sin uso
-por_auto_compra_ci         --por el momento sin uso
 
