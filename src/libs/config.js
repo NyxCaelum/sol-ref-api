@@ -1,8 +1,8 @@
 //variables de entorno
 module.exports = {
     database: process.env.DATABASE || 'solicitud_refacciones',
-    username: process.env.USER_DATABASE || 'dev',
-    password: process.env.PASSWORD_DATABASE || 'Develop123',   
+    username: process.env.USER_DATABASE || 'Devhjc',
+    password: process.env.PASSWORD_DATABASE || 'TLEA_2025_db_25k!!!',   
     options:{
         logging: false,
         host: process.env.HOST_DATABASE ||'localhost',
