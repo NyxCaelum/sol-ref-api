@@ -1,4 +1,6 @@
 //variables de entorno
+const dotenv = require('dotenv').config();
+
 module.exports = {
     database: process.env.DATABASE || 'solicitud_refacciones',
     username: process.env.USER_DATABASE || 'devhjc',
