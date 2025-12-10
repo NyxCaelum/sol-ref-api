@@ -15,6 +15,10 @@ module.exports = (sequelize, DataType) => {
             type: DataType.STRING(125),
             allowNull: true,
         },
+        tipo_entrega: {
+            type: DataType.INTEGER,
+            allowNull: false,
+        },
         cantidad: {
             type: DataType.INTEGER,
             allowNull: false,

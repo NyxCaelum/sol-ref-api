@@ -360,7 +360,7 @@ module.exports = (app) => {
                   'diferencia_horas_minutos'
                 ]]
               },
-              order: [['id_cambio', 'ASC']]
+              order: [['id_cambio', 'DESC']]
             }
           ]
         },
@@ -370,10 +370,7 @@ module.exports = (app) => {
       limit: limit
     });
 
-    // console.log(solicitudes.length)
-
     const parseSolicitudes = JSON.parse(JSON.stringify(solicitudes));
-    // console.log(parseSolicitudes);
 
     let solicitudyRefacciones;
 
@@ -1473,6 +1470,8 @@ module.exports = (app) => {
 
     try {
 
+      // Fecha compromiso en por enviar almacen central. si es en confimar recepcion almacen interno
+      // Pasa por alto esto
       if(fechaCompromisoAC){
         await refaccionSolicitada.update(
           {
@@ -1484,20 +1483,22 @@ module.exports = (app) => {
         );
       }
 
-
+      
       if(data.estatus === 'pte_recepcion_ac' && confirmarRecepcionAlmacenCentral){
+        const EntregaDirecta = (data.tipo_entrega === 2) ? 'pte_factura_interna' : 'pte_enviar_ac';
+
         await refaccionSolicitada.update(
           {
-            estatus: 'pte_enviar_ac'
+            estatus: EntregaDirecta
           },
           {
-           where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
+            where: {id_refaccion_solicitada: data.id_refaccion_solicitada}
           }
         );
 
         await CambioEstatusRefaccion.create({
           id_refaccion_solicitada: data.id_refaccion_solicitada,
-          estatus: 'pte_enviar_ac',
+          estatus: EntregaDirecta,
           fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
         });
       }
@@ -1519,10 +1520,10 @@ module.exports = (app) => {
         });
       }
         
-        return res.json({
-            OK: true,
-            msg: 'Actualizado correctamente'
-        });
+      return res.json({
+        OK: true,
+        msg: 'Actualizado correctamente'
+      });
     } catch (error) {
         console.error('Error en ActualizarSolicitud:', error);
         return res.json(error);
