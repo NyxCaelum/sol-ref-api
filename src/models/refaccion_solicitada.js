@@ -17,7 +17,7 @@ module.exports = (sequelize, DataType) => {
         },
         tipo_entrega: {
             type: DataType.INTEGER,
-            allowNull: false,
+            allowNull: true,
         },
         cantidad: {
             type: DataType.INTEGER,

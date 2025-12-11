@@ -87,41 +87,12 @@ module.exports = app => {
               transaction: t,
             }
           );
+          
           await CambioEstatusRefaccion.create({
             id_refaccion_solicitada: data.id_refaccion_solicitada,
             estatus: 'pte_recepcion_ac',
             fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
           }, { transaction: t });
-      
-          // if (pasarARecepcion) {
-          //   await refaccionSolicitada.update(
-          //     { estatus: 'pte_recepcion_ac' },
-          //     {
-          //       where: { id_refaccion_solicitada: data.id_refaccion_solicitada },
-          //       transaction: t,
-          //     }
-          //   );
-          //   await CambioEstatusRefaccion.create({
-          //     id_refaccion_solicitada: data.id_refaccion_solicitada,
-          //     estatus: 'pte_recepcion_ac',
-          //     fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-          //   }, { transaction: t });
-          // }
-      
-          // if (pasarAEntregaDirecta) {
-          //   await refaccionSolicitada.update(
-          //     { estatus: 'por_recibir_ai' },
-          //     {
-          //       where: { id_refaccion_solicitada: data.id_refaccion_solicitada },
-          //       transaction: t,
-          //     }
-          //   );
-          //   await CambioEstatusRefaccion.create({
-          //     id_refaccion_solicitada: data.id_refaccion_solicitada,
-          //     estatus: 'por_recibir_ai',
-          //     fecha_cambio: moment().format('YYYY-MM-DD HH:mm:ss'),
-          //   }, { transaction: t });
-          // }
       
           await t.commit();
           return res.json({ OK: true, result: registro });
