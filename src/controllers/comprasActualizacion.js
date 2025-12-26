@@ -59,7 +59,7 @@ module.exports = app => {
               data.fecha_autorizacion_ci = moment().format('YYYY-MM-DD HH:mm:ss');
             }
           }
-
+          // prueba
           if (data.orden_compra) {
             if (!registro || registro.orden_compra === null) {
               data.fecha_oc = moment().format('YYYY-MM-DD HH:mm:ss');
@@ -87,7 +87,7 @@ module.exports = app => {
               transaction: t,
             }
           );
-          
+
           await CambioEstatusRefaccion.create({
             id_refaccion_solicitada: data.id_refaccion_solicitada,
             estatus: 'pte_recepcion_ac',

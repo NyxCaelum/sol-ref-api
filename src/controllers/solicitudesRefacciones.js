@@ -432,9 +432,16 @@ module.exports = (app) => {
         case '1':
           const PorSolicitar = await solicitudesCompletas(base, numeroProceso);
 
+          // const PorSolicitarFiltrado = PorSolicitar.filter(solicitud =>
+          //   !solicitud.refaccionesSolicitadas.some(refa => refa.estatus === 'informacion_adicional_solicitada')
+          // );
+
+          // console.log(PorSolicitarFiltrado)
+
           return res.json({ 
             OK: true, 
             result: PorSolicitar,
+            // result: PorSolicitarFiltrado,
           });
 
         case '2':

@@ -1,5 +1,5 @@
 require('colors');
-
+const morgan = require('morgan');
 const express = require('express');
 const cors = require('cors')
 const app = express();
@@ -45,6 +45,13 @@ io.on('connection', (socket) => {
   });
   
 });
+
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
+  skip: (req, res) => {
+    const len = parseInt(res.getHeader('content-length') || 0);
+    return len < 500000; // < 500 KB no se loggea
+  }
+}));
 
 //Iniciar Server
 http.listen(app.get('port'), () => {
