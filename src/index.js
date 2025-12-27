@@ -46,7 +46,14 @@ io.on('connection', (socket) => {
   
 });
 
+// Ruta del archivo de logs
+const logPath = path.join(__dirname, 'traffic.log');
+ 
+// Stream al archivo (append)
+const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+ 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
+  stream: logStream,
   skip: (req, res) => {
     const len = parseInt(res.getHeader('content-length') || 0);
     return len < 500000; // < 500 KB no se loggea
