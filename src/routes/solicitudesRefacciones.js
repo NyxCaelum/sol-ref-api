@@ -22,6 +22,7 @@ module.exports = app => {
     app.post('/solicitudes/nueva', [verificarToken], SolicitudesRefacciones.NuevaSolicitud);  
     app.post('/almaceninterno/confirmarrecepcion', [verificarToken], SolicitudesRefacciones.confirmarRecepcion);
     app.post('/solicitudes/cancelar/:id_refaccion_solicitada', SolicitudesRefacciones.cancelarSolicitudDeRefaccion);
+    app.post('/solicitudes/ot', SolicitudesRefacciones.refaccionesSolicitudEntrega);
     
     app.patch('/solicitudes/actualizarsolicitud', [verificarToken], SolicitudesRefacciones.ActualizarSolicitud);
     app.patch('/solicitudes/actualizarValidarSolicitud', [verificarToken], SolicitudesRefacciones.ActualizarValidarSolicitud);

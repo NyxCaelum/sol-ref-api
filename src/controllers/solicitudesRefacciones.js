@@ -2067,6 +2067,44 @@ module.exports = (app) => {
     }
   }
 
+  app.refaccionesSolicitudEntrega = async (req, res) => {
+    try {
+      const { ots } = req.body;
+
+      const refacciones = await Sequelize.query(
+        `
+          SELECT
+            SOL.ot,
+            RC.refaccion,
+            SOL.fecha_solicitud_completa AS fecha_solicitud,
+            REF.fecha_entrega
+          FROM
+            solicitud SOL
+            LEFT JOIN refaccion_solicitada REF ON SOL.id_solicitud = REF.id_solicitud
+            LEFT JOIN refacciones_catalogo RC ON REF.id_refaccion = RC.id_refaccion
+          WHERE
+            SOL.ot IN (:ots)
+        `,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { ots: ots }
+        }
+      );
+
+      return res.status(200).json({
+        OK: true,
+        result: refacciones
+      });
+
+    } catch (error) {
+      console.error('Error al obtener refacciones:', error);
+      return res.status(500).json({ 
+        OK: false,
+        msg: error,
+      });
+    }
+  }
+
   return app;
 };
 
