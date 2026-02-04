@@ -12,6 +12,7 @@ module.exports = app => {
     
     // En modulo de analitica
     app.get('/analitica/tiemposporprocesos/:base/:fecha_inicio/:fecha_fin', SolicitudesRefacciones.datasetTiemposPorProceso);
+    app.get('/analitica/tiempos/:base', SolicitudesRefacciones.dataTiemposRefacciones);
 
     app.get('/solicitudes/reporte', SolicitudesRefacciones.ReporteRefaccionesPendientes);
     

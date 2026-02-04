@@ -1919,7 +1919,113 @@ module.exports = (app) => {
       console.error('Error en dataset tiempos por proceso:', err);
       return res.json(err);
     }
-    
+  }
+
+  app.dataTiemposRefacciones = async (req, res) => {
+
+    try {
+
+      const { base } = req.params;
+
+      let optionBase;
+
+      if(Number(base) === 3){
+        optionBase = [1, 2]
+      } else {
+        optionBase = [base]
+      }
+
+      const cteBase = `
+        WITH cambios AS (
+          SELECT
+            S.id_base,
+            RS.id_refaccion_solicitada,
+            RS.fecha_entrega,
+            S.unidad,
+            RC.refaccion,
+            CSR.estatus,
+            CSR.fecha_cambio,
+            LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
+            LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
+          FROM refaccion_solicitada RS
+          LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion
+          LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
+          LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
+        ),
+        tiempos AS (
+          SELECT
+            *,
+            ROUND(TIMESTAMPDIFF(MINUTE, fecha_cambio, fecha_anterior) / 60, 2) AS total_horas
+          FROM cambios
+        ),
+        base AS (
+          SELECT
+            id_base,
+            id_refaccion_solicitada,
+            unidad,
+            fecha_entrega,
+            refaccion,
+            IFNULL(SUM(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) AS por_solicitar,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) AS pte_validar_sol_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) AS solicitud_rechazada,
+            IFNULL(SUM(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) AS en_proceso_compras,
+            IFNULL(SUM(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) AS informacion_adicional_solicitada,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) AS pte_recepcion_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) AS pte_enviar_ac,
+            IFNULL(SUM(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) AS por_recibir_ai,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_factura_interna' THEN total_horas END), 0) AS pte_factura_interna,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_entrada_ai' THEN total_horas END), 0) AS pte_entrada_ai,
+            IFNULL(SUM(CASE WHEN estatus = 'pte_salida_alm' THEN total_horas END), 0) AS pte_salida_alm,
+            ROUND(
+              IFNULL(MAX(CASE WHEN estatus = 'por_solicitar' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_validar_sol_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'solicitud_rechazada' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'en_proceso_compras' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'informacion_adicional_solicitada' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_recepcion_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_enviar_ac' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'por_recibir_ai' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_factura_interna' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_entrada_ai' THEN total_horas END), 0) +
+              IFNULL(MAX(CASE WHEN estatus = 'pte_salida_alm' THEN total_horas END), 0),
+            2) AS total_estatus_horas
+          FROM tiempos
+          WHERE
+            DATE(fecha_entrega) >= DATE_SUB(CURRENT_DATE(), INTERVAL 10 WEEK)
+            AND id_base IN (:optionBase)
+          GROUP BY
+            id_base,
+            id_refaccion_solicitada,
+            unidad,
+            fecha_entrega,
+            refaccion
+      )`;
+
+      const sqlTabla = `
+        ${cteBase}
+        SELECT *
+        FROM base
+      `;
+
+      const replacements = {
+        optionBase
+      };
+
+      Sequelize.query(sqlTabla, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements
+      })
+
+      return res.status(200).json({
+        OK: true,
+        msg: 'Refacciones obtenidas correctamente',
+        tabla: tabla,
+      });
+
+    } catch (err) {
+      console.error('Error en dataset tiempos por proceso:', err);
+      return res.json(err);
+    }
   }
 
   app.confirmarRecepcionAI = async (req, res) => {
