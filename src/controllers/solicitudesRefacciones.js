@@ -2011,16 +2011,12 @@ module.exports = (app) => {
         optionBase
       };
 
-      Sequelize.query(sqlTabla, {
+      const tiempos = await Sequelize.query(sqlTabla, {
         type: Sequelize.QueryTypes.SELECT,
         replacements
       })
 
-      return res.status(200).json({
-        OK: true,
-        msg: 'Refacciones obtenidas correctamente',
-        tabla: tabla,
-      });
+      return res.status(200).json(tiempos);
 
     } catch (err) {
       console.error('Error en dataset tiempos por proceso:', err);
