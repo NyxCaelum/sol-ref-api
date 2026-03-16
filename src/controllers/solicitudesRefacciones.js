@@ -1948,9 +1948,9 @@ module.exports = (app) => {
             LAG(CSR.estatus) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS estatus_anterior,
             LAG(CSR.fecha_cambio) OVER (PARTITION BY RS.id_refaccion_solicitada ORDER BY CSR.fecha_cambio DESC) AS fecha_anterior
           FROM refaccion_solicitada RS
-          LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion
-          LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
-          LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
+            LEFT JOIN refacciones_catalogo RC ON RC.id_refaccion = RS.id_refaccion
+            LEFT JOIN solicitud S ON S.id_solicitud = RS.id_solicitud
+            LEFT JOIN cambio_estatus_refaccion CSR ON CSR.id_refaccion_solicitada = RS.id_refaccion_solicitada
         ),
         tiempos AS (
           SELECT
@@ -1991,7 +1991,8 @@ module.exports = (app) => {
             2) AS total_estatus_horas
           FROM tiempos
           WHERE
-            DATE(fecha_entrega) >= DATE_SUB(CURRENT_DATE(), INTERVAL 10 WEEK)
+            -- DATE(fecha_entrega) >= DATE_SUB(CURRENT_DATE(), INTERVAL 10 WEEK)
+            DATE(fecha_entrega) = '2026-02-03'
             AND id_base IN (:optionBase)
           GROUP BY
             id_base,
@@ -2178,14 +2179,19 @@ module.exports = (app) => {
           SELECT
             SOL.ot,
             RC.refaccion,
+            REF.estatus,
+            REF.fecha_compromiso_envio_ac AS eta_alm_central,
+            CA.fecha_compromiso AS eta_compras,
             SOL.fecha_solicitud_completa AS fecha_solicitud,
             REF.fecha_entrega
           FROM
             solicitud SOL
             LEFT JOIN refaccion_solicitada REF ON SOL.id_solicitud = REF.id_solicitud
             LEFT JOIN refacciones_catalogo RC ON REF.id_refaccion = RC.id_refaccion
+            LEFT JOIN compras_actualizacion CA ON REF.id_refaccion_solicitada = CA.id_refaccion_solicitada
           WHERE
             SOL.ot IN (:ots)
+            AND REF.estatus != "cancelada"
         `,
         {
           type: Sequelize.QueryTypes.SELECT,
