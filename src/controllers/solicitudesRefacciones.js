@@ -2178,6 +2178,7 @@ module.exports = (app) => {
         `
           SELECT
             SOL.ot,
+            RC.clave,
             RC.refaccion,
             REF.estatus,
             REF.fecha_compromiso_envio_ac AS eta_alm_central,
