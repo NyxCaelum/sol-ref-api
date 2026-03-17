@@ -2184,7 +2184,8 @@ module.exports = (app) => {
             REF.fecha_compromiso_envio_ac AS eta_alm_central,
             CA.fecha_compromiso AS eta_compras,
             SOL.fecha_solicitud_completa AS fecha_solicitud,
-            REF.fecha_entrega
+            REF.fecha_entrega,
+            REF.tipo_entrega
           FROM
             solicitud SOL
             LEFT JOIN refaccion_solicitada REF ON SOL.id_solicitud = REF.id_solicitud
