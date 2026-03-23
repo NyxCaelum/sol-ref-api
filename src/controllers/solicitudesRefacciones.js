@@ -1991,8 +1991,8 @@ module.exports = (app) => {
             2) AS total_estatus_horas
           FROM tiempos
           WHERE
-            -- DATE(fecha_entrega) >= DATE_SUB(CURRENT_DATE(), INTERVAL 10 WEEK)
-            DATE(fecha_entrega) = '2026-02-03'
+            DATE(fecha_entrega) >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 WEEK)
+            -- DATE(fecha_entrega) = '2026-02-03'
             AND id_base IN (:optionBase)
           GROUP BY
             id_base,
