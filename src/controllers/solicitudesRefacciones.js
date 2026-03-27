@@ -4,6 +4,8 @@ const path = require('path');
 const sequelize = require('sequelize');
 const { Op } = require('sequelize');
 
+const axios = require('axios');
+
 // const sql = require('mssql')
 // const sqlConfig = require('../libs/configMSSQL');
 
@@ -411,9 +413,6 @@ module.exports = (app) => {
   }
 
   app.SolicitudesPte = async (req, res) => {
-    
-    // console.log( typeof base)
-    // console.log(typeof numeroProceso)
     
     try {
       
@@ -1093,8 +1092,16 @@ module.exports = (app) => {
       
       const solicitudCreada = await Solicitud.create(solicitud);
 
-      refacciones = refacciones.map(refaccion => {
+      refacciones = refacciones.map(async refaccion => {
         refaccion.id_solicitud = solicitudCreada.id_solicitud;
+
+        const checkUltimaSolicitud = await verificarUltimaSolicitud(solicitud.unidad, refaccion.id_refaccion);
+        if(checkUltimaSolicitud) {
+          refaccion.fecha_ultima_solicitud = checkUltimaSolicitud;
+          refaccion.menor_un_año = true;
+        } else {
+          refaccion.menor_un_año = false;
+        }
 
         if (refaccion.evidencia_core) {
           refaccion.evidencia_core = saveBase64File(refaccion.evidencia_core, evidenciaRefacciones, 'evidencia_core', refaccion, 'refaccion');
@@ -1112,9 +1119,10 @@ module.exports = (app) => {
           refaccion.evidencia_reporte_danos = saveBase64File(refaccion.evidencia_reporte_danos, evidenciaRefacciones, 'evidencia_reporte_danos', refaccion, 'refaccion');
         }
         return refaccion;
-      })
+      });
 
-      const refaccionesCreadas = await refaccionSolicitada.bulkCreate(refacciones);
+      const refaccionesProcesadas = await Promise.all(refacciones);
+      const refaccionesCreadas = await refaccionSolicitada.bulkCreate(refaccionesProcesadas);
 
       await Promise.all(
         refaccionesCreadas.map(async (refaccion) => {
@@ -1276,6 +1284,7 @@ module.exports = (app) => {
           procesarEvidenciaRef('evidencia_tarjeta_roja'),
           procesarEvidenciaRef('evidencia_ausencia_core'),
           procesarEvidenciaRef('evidencia_reporte_danos'),
+          procesarEvidenciaRef('autorizacion_menor_un_año'),
         ]);
   
         // condicionales de estatus
@@ -1298,6 +1307,9 @@ module.exports = (app) => {
           evidencia_tarjeta_roja: r.evidencia_tarjeta_roja,
           evidencia_ausencia_core: r.evidencia_ausencia_core,
           evidencia_reporte_danos: r.evidencia_reporte_danos,
+          menor_un_año: r.menor_un_año,
+          fecha_ultima_solicitud: r.fecha_ultima_solicitud,
+          autorizacion_menor_un_año: r.autorizacion_menor_un_año,
         }, {
           where: { id_refaccion_solicitada: r.id_refaccion_solicitada },
           transaction: t,
@@ -1323,6 +1335,9 @@ module.exports = (app) => {
           if (r.evidencia_reporte_danos) {
             r.evidencia_reporte_danos = saveBase64File(r.evidencia_reporte_danos, evidenciaRefacciones, 'evidencia_reporte_danos', r, 'refaccion');
           }
+          if (r.autorizacion_menor_un_año) {
+            r.autorizacion_menor_un_año = saveBase64File(r.autorizacion_menor_un_año, evidenciaRefacciones, 'autorizacion_menor_un_año', r, 'refaccion');
+          }
   
           // estatus inicial
           if (solicitudCompleta || estadoInicial === 4) {
@@ -1339,6 +1354,9 @@ module.exports = (app) => {
             evidencia_tarjeta_roja: r.evidencia_tarjeta_roja,
             evidencia_ausencia_core: r.evidencia_ausencia_core,
             evidencia_reporte_danos: r.evidencia_reporte_danos,
+            menor_un_año: r.menor_un_año,
+            fecha_ultima_solicitud: r.fecha_ultima_solicitud,
+            autorizacion_menor_un_año: r.autorizacion_menor_un_año,
           });
         }
   
@@ -2215,17 +2233,137 @@ module.exports = (app) => {
     }
   }
 
+  app.checkUltimaSolicitudIndividual = async (req, res) => {
+    try {
+      const { unidad, id_refaccion } = req.params;
+
+      const result = await verificarUltimaSolicitud(unidad, id_refaccion);
+      return res.status(200).json({
+        OK: true,
+        result: result
+      });
+    } catch (error) {
+      console.error('Error en checkUltimaSolicitudIndividual:', error);
+      return res.status(500).json({
+        OK: false,
+        msg: error.message,
+      });
+    }
+  }
+
+  const verificarUltimaSolicitud = async (unidad, id_refaccion) => {
+    const [refaccion] = await Sequelize.query(
+      `
+      SELECT
+        clave
+      FROM
+        refacciones_catalogo
+      WHERE
+        id_refaccion = :id_refaccion
+      `,
+      {
+        replacements: { id_refaccion: id_refaccion },
+        type: Sequelize.QueryTypes.SELECT
+      }
+    );
+
+    const ultimaSolicitud = await checkUltimaSolicitud(unidad, refaccion.clave);
+    if(ultimaSolicitud && ultimaSolicitud.fecha_advan){
+      const diffDias = moment().diff(moment(ultimaSolicitud.fecha_advan), 'days');
+      if (diffDias <= 365) {
+        return ultimaSolicitud.fecha_advan;
+      }
+    }
+    return null;
+  }
+
+  const checkUltimaSolicitud = async (unidad, id_refaccion) => {
+    try {
+      let tipo_unidad;
+      if(unidad.includes('TL') || unidad.includes('C')) tipo_unidad = 'tr';
+      if(unidad.includes('RE') || unidad.includes('DL')) tipo_unidad = 're';
+
+      const result = await axios.get(`https://servidorlocal.ngrok.app/refacciones/ultimasolicitud/${tipo_unidad}/${unidad}/${id_refaccion}`);
+      return result.data.result[0];
+    } catch (error) {
+      console.error('Error al obtener última solicitud - Refacciones: ', error.message);
+      throw new Error('Error al obtener última solicitud - Refacciones')
+    }
+  }
+
+  const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
+    if(nombreArchivo){
+      const previousFilePath = path.join(filepath, nombreArchivo);
+      if (fs.existsSync(previousFilePath)) {
+        fs.unlinkSync(previousFilePath);
+      }
+    }
+  }
+
+  // const checkUltimaSolicitud = async (unidad, id_refaccion) => {
+
+  //       try {
+
+  //           await sql.connect(sqlConfig);
+
+  //           let tipo_unidad;
+  //           if(unidad.includes('TL') || unidad.includes('C')) tipo_unidad = 'tr';
+  //           if(unidad.includes('RE') || unidad.includes('DL')) tipo_unidad = 're';
+
+  //           const query_tracto = `
+  //               SELECT TOP 1
+  //                   OM.ORDEN_FOLIO AS ot,
+  //                   TR.TRACTO_NUM_ECO AS unidad,
+  //                   SMA.PRODUCTO_CLAVE AS clave,
+  //                   AP.PRODUCTO_DESCRIP AS refaccion,
+  //                   SMA.FECHA AS fecha_advan
+  //               FROM
+  //                   ORDEN_MANTTO OM
+  //                   INNER JOIN SOLICITUD_MANTTO_ALMACEN SMA ON OM.ORDEN_CLAVE = SMA.ORDEN_CLAVE
+  //                   INNER JOIN ALM_PRODUCTO AP ON SMA.PRODUCTO_CLAVE = AP.PRODUCTO_CLAVE
+  //                   LEFT JOIN TRACTO TR ON OM.TRACTO_CLAVE = TR.TRACTO_CLAVE
+  //               WHERE
+  //                   TR.TRACTO_NUM_ECO = '${unidad}'
+  //                   AND SMA.PRODUCTO_CLAVE = '${id_refaccion}'
+  //                   AND SMA.BAN_aplica = 1
+  //                   AND SMA.STATUS_SOL != 2
+  //               ORDER BY SMA.FECHA DESC;
+  //           `
+
+  //           const query_remolque = `
+  //               SELECT TOP 1
+  //                   OM.ORDEN_FOLIO AS ot,
+  //                   RE.REMOLQUE_NUM_ECO AS unidad,
+  //                   SMA.PRODUCTO_CLAVE AS clave,
+  //                   AP.PRODUCTO_DESCRIP AS refaccion,
+  //                   SMA.FECHA AS fecha_advan
+  //               FROM
+  //                   ORDEN_MANTTO OM
+  //                   INNER JOIN SOLICITUD_MANTTO_ALMACEN SMA ON OM.ORDEN_CLAVE = SMA.ORDEN_CLAVE
+  //                   INNER JOIN ALM_PRODUCTO AP ON SMA.PRODUCTO_CLAVE = AP.PRODUCTO_CLAVE
+  //                   LEFT JOIN REMOLQUE RE ON OM.REMOLQUE_CLAVE = RE.REMOLQUE_CLAVE
+  //               WHERE
+  //                   RE.REMOLQUE_NUM_ECO = '${unidad}'
+  //                   AND SMA.PRODUCTO_CLAVE = '${id_refaccion}'
+  //                   AND SMA.BAN_aplica = 1
+  //                   AND SMA.STATUS_SOL != 2
+  //               ORDER BY SMA.FECHA DESC;
+  //           `
+  //           const result = await sql.query(tipo_unidad === 'tr' ? query_tracto : query_remolque);
+
+  //           return result.recordset;
+            
+  //       } catch (error) {
+  //           console.log(error)
+  //           throw new Error('Error al obtener acciones de ot');
+  //       } finally {
+  //           sql.close();
+  //       }
+  //   }
+
   return app;
 };
 
-const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
-  if(nombreArchivo){
-    const previousFilePath = path.join(filepath, nombreArchivo);
-    if (fs.existsSync(previousFilePath)) {
-      fs.unlinkSync(previousFilePath);
-    }
-  }
-}
 
 // app.crearFamilia = async (req, res) => {
 
@@ -2250,3 +2388,23 @@ const EliminarEvidenciaAnterior = (nombreArchivo, filepath) => {
 //         });
 //     }
 // }
+
+// SELECT TOP 1
+//     OM.ORDEN_FOLIO AS ot,
+//     TR.TRACTO_NUM_ECO AS tracto,
+//     RE.REMOLQUE_NUM_ECO AS remolque,
+//     SMA.PRODUCTO_CLAVE AS clave,
+//     AP.PRODUCTO_DESCRIP AS refaccion,
+//     SMA.FECHA AS fecha_advan
+// FROM
+//     ORDEN_MANTTO OM
+//     INNER JOIN SOLICITUD_MANTTO_ALMACEN SMA ON OM.ORDEN_CLAVE = SMA.ORDEN_CLAVE
+//     INNER JOIN ALM_PRODUCTO AP ON SMA.PRODUCTO_CLAVE = AP.PRODUCTO_CLAVE
+//     LEFT JOIN TRACTO TR ON OM.TRACTO_CLAVE = TR.TRACTO_CLAVE
+//     LEFT JOIN REMOLQUE RE ON OM.REMOLQUE_CLAVE = RE.REMOLQUE_CLAVE
+// WHERE
+//     TR.TRACTO_NUM_ECO = 'TLEA-193'
+//     AND SMA.PRODUCTO_CLAVE = 'SUSP-0106002071'
+//     AND SMA.BAN_aplica = 1
+//     AND SMA.STATUS_SOL != 2
+// ORDER BY SMA.FECHA DESC;

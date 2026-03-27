@@ -6,6 +6,7 @@ module.exports = app => {
     // Principales
     app.get('/solicitudes/:base/:proceso', SolicitudesRefacciones.SolicitudesPte);
     app.get('/conteorefacciones/:id_base', SolicitudesRefacciones.conteoRefaccionesPorProceso);
+    app.get('/solicitudes/ultimasolicitud/:unidad/:id_refaccion', SolicitudesRefacciones.checkUltimaSolicitudIndividual);
     
     // Exportable
     app.get('/solicitudes/exportarRefaccionesPendientes', SolicitudesRefacciones.ExportarRefacciones);

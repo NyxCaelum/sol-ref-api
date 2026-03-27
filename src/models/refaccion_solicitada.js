@@ -27,6 +27,18 @@ module.exports = (sequelize, DataType) => {
             type: DataType.INTEGER,
             allowNull: false,
         },
+        menor_un_año: {
+            type: DataType.BOOLEAN,
+            allowNull: true,
+        },
+        fecha_ultima_solicitud: {
+            type: DataType.DATE,
+            allowNull: true,
+        },
+        autorizacion_menor_un_año: {
+            type: DataType.STRING(300),
+            allowNull: true,
+        },
         core: {
             type: DataType.INTEGER,
             allowNull: true,
