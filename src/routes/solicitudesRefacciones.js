@@ -1,10 +1,10 @@
 module.exports = app => {
 
     const SolicitudesRefacciones = app.controllers.solicitudesRefacciones;
-    const { verificarToken } = app.middlewares.auth;
+    const { verificarToken, verificarUsuario } = app.middlewares.auth;
 
     // Principales
-    app.get('/solicitudes/:base/:proceso', SolicitudesRefacciones.SolicitudesPte);
+    app.get('/solicitudes/:base/:proceso', verificarToken, SolicitudesRefacciones.SolicitudesPte);
     app.get('/conteorefacciones/:id_base', SolicitudesRefacciones.conteoRefaccionesPorProceso);
     app.get('/solicitudes/ultimasolicitud/:unidad/:id_refaccion', SolicitudesRefacciones.checkUltimaSolicitudIndividual);
     

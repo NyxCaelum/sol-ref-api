@@ -6,8 +6,8 @@ const { Op } = require('sequelize');
 
 const axios = require('axios');
 
-// const sql = require('mssql')
-// const sqlConfig = require('../libs/configMSSQL');
+const sql = require('mssql')
+const sqlConfig = require('../libs/configMSSQL');
 
 function saveBase64File(base64Data, folder, filenamePrefix, solicitud, type) {
   if (!fs.existsSync(folder)) {
